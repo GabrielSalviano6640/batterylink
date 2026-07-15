@@ -63,7 +63,7 @@ export function ReportsTab() {
     const total = batteries.reduce((s, b) => s + b.quantidade, 0);
     const kwh = batteries.reduce((s, b) => s + (Number(b.capacidade_kwh) || 0) * b.quantidade, 0);
     const kg = batteries.reduce((s, b) => s + (Number(b.peso_kg) || 0) * b.quantidade, 0);
-    const destinadas = batteries.filter((b) => ["delivered", "recycled", "second_life"].includes(b.status))
+    const destinadas = batteries.filter((b) => ["recebida_pelo_destinador", "documentacao_pendente", "concluida"].includes(b.status))
       .reduce((s, b) => s + b.quantidade, 0);
     // Rough CO2 avoided estimate: ~2.5 kg CO2 per kg battery recycled (informative)
     const co2 = kg * 2.5;
