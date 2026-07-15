@@ -342,8 +342,8 @@ function OperationsTab() {
         supabase.from("batteries").select("id", { count: "exact", head: true }),
         supabase.from("lots").select("id", { count: "exact", head: true }),
         supabase.from("collections").select("id", { count: "exact", head: true }),
-        supabase.from("batteries").select("id", { count: "exact", head: true }).eq("status", "delivered"),
-        supabase.from("batteries").select("id", { count: "exact", head: true }).in("status", ["recycled", "second_life"]),
+        supabase.from("batteries").select("id", { count: "exact", head: true }).in("status", ["recebida_pelo_destinador", "documentacao_pendente", "concluida"]),
+        supabase.from("batteries").select("id", { count: "exact", head: true }).eq("status", "concluida"),
         supabase.from("batteries").select("*").order("created_at", { ascending: false }).limit(10),
       ]);
       setCounts({
@@ -413,8 +413,8 @@ function FinanceTab() {
 
   const lotById = useMemo(() => new Map(lots.map((l) => [l.id, l])), [lots]);
   const totals = useMemo(() => {
-    const accepted = proposals.filter((p) => p.status === "accepted");
-    const pending = proposals.filter((p) => p.status === "submitted");
+    const accepted = proposals.filter((p) => p.status === "aceita");
+    const pending = proposals.filter((p) => ["enviada", "em_analise"].includes(p.status));
     const sum = (arr: Proposal[]) => arr.reduce((s, p) => s + Number(p.valor_total || 0), 0);
     return {
       acceptedCount: accepted.length,
