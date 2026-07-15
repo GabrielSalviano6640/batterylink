@@ -235,7 +235,9 @@ export type Database = {
       }
       collections: {
         Row: {
+          arrival_at: string | null
           battery_id: string | null
+          carrier_organization_id: string | null
           codigo_coleta: string | null
           created_at: string
           data_agendada: string | null
@@ -245,12 +247,13 @@ export type Database = {
           destino_endereco: string
           generator_organization_id: string | null
           id: string
-          lot_id: string
+          lot_id: string | null
           motorista: string | null
           observacoes: string | null
           operator_organization_id: string | null
           origem_endereco: string
           placa: string | null
+          recycler_organization_id: string | null
           scheduled_at: string | null
           status: Database["public"]["Enums"]["collection_status"]
           transportadora_id: string | null
@@ -258,7 +261,9 @@ export type Database = {
           veiculo: string | null
         }
         Insert: {
+          arrival_at?: string | null
           battery_id?: string | null
+          carrier_organization_id?: string | null
           codigo_coleta?: string | null
           created_at?: string
           data_agendada?: string | null
@@ -268,12 +273,13 @@ export type Database = {
           destino_endereco: string
           generator_organization_id?: string | null
           id?: string
-          lot_id: string
+          lot_id?: string | null
           motorista?: string | null
           observacoes?: string | null
           operator_organization_id?: string | null
           origem_endereco: string
           placa?: string | null
+          recycler_organization_id?: string | null
           scheduled_at?: string | null
           status?: Database["public"]["Enums"]["collection_status"]
           transportadora_id?: string | null
@@ -281,7 +287,9 @@ export type Database = {
           veiculo?: string | null
         }
         Update: {
+          arrival_at?: string | null
           battery_id?: string | null
+          carrier_organization_id?: string | null
           codigo_coleta?: string | null
           created_at?: string
           data_agendada?: string | null
@@ -291,12 +299,13 @@ export type Database = {
           destino_endereco?: string
           generator_organization_id?: string | null
           id?: string
-          lot_id?: string
+          lot_id?: string | null
           motorista?: string | null
           observacoes?: string | null
           operator_organization_id?: string | null
           origem_endereco?: string
           placa?: string | null
+          recycler_organization_id?: string | null
           scheduled_at?: string | null
           status?: Database["public"]["Enums"]["collection_status"]
           transportadora_id?: string | null
