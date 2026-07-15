@@ -1,9 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
 import { Download } from "lucide-react";
 import { exportCsv } from "@/lib/export-csv";
+import { workflowRpc } from "@/lib/workflow";
 
 type Battery = Tables<"batteries">;
 type Lot = Tables<"lots">;
@@ -11,9 +24,33 @@ type Proposal = Tables<"proposals">;
 
 const COLORS = ["#d4ff3d", "#60a5fa", "#a78bfa", "#34d399", "#f59e0b", "#f87171", "#94a3b8"];
 
+type EnvironmentalIndicators = {
+  disclaimer: string;
+  available: boolean;
+  unavailable_message: string;
+  mass_processed_kg: number;
+  second_life_kg: number;
+  recycling_kg: number;
+  lithium_recoverable_kg: number | null;
+  nickel_recoverable_kg: number | null;
+  cobalt_recoverable_kg: number | null;
+  copper_recoverable_kg: number | null;
+  avoided_emissions_kgco2e: number | null;
+};
+type EnvironmentalFactor = {
+  id: string;
+  chemistry: string;
+  methodology: string;
+  source: string;
+  version: string;
+  effective_from: string;
+  active: boolean;
+};
+
 export function ReportsTab() {
   const [from, setFrom] = useState<string>(() => {
-    const d = new Date(); d.setDate(d.getDate() - 90);
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
     return d.toISOString().slice(0, 10);
   });
   const [to, setTo] = useState<string>(new Date().toISOString().slice(0, 10));
@@ -21,22 +58,33 @@ export function ReportsTab() {
   const [lots, setLots] = useState<Lot[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [environmental, setEnvironmental] = useState<EnvironmentalIndicators | null>(null);
+  const [factors, setFactors] = useState<EnvironmentalFactor[]>([]);
 
   const load = async () => {
     setLoading(true);
     const fromIso = new Date(from + "T00:00:00").toISOString();
     const toIso = new Date(to + "T23:59:59").toISOString();
-    const [b, l, p] = await Promise.all([
+    const [b, l, p, indicators, configuredFactors] = await Promise.all([
       supabase.from("batteries").select("*").gte("created_at", fromIso).lte("created_at", toIso),
       supabase.from("lots").select("*").gte("created_at", fromIso).lte("created_at", toIso),
       supabase.from("proposals").select("*").gte("created_at", fromIso).lte("created_at", toIso),
+      workflowRpc<EnvironmentalIndicators>("get_environmental_indicators", {
+        _from: from,
+        _to: to,
+      }),
+      workflowRpc<EnvironmentalFactor[]>("list_environmental_factors", {}),
     ]);
     setBatteries(b.data ?? []);
     setLots(l.data ?? []);
     setProposals(p.data ?? []);
+    setEnvironmental(indicators);
+    setFactors(configuredFactors ?? []);
     setLoading(false);
   };
-  useEffect(() => { void load(); }, [from, to]);
+  useEffect(() => {
+    void load();
+  }, [from, to]);
 
   const byStatus = useMemo(() => {
     const m = new Map<string, number>();
@@ -56,19 +104,54 @@ export function ReportsTab() {
       const k = new Date(b.created_at).toISOString().slice(0, 7);
       m.set(k, (m.get(k) ?? 0) + b.quantidade);
     });
-    return Array.from(m.entries()).sort().map(([mes, qtd]) => ({ mes, qtd }));
+    return Array.from(m.entries())
+      .sort()
+      .map(([mes, qtd]) => ({ mes, qtd }));
   }, [batteries]);
 
   const totals = useMemo(() => {
     const total = batteries.reduce((s, b) => s + b.quantidade, 0);
     const kwh = batteries.reduce((s, b) => s + (Number(b.capacidade_kwh) || 0) * b.quantidade, 0);
     const kg = batteries.reduce((s, b) => s + (Number(b.peso_kg) || 0) * b.quantidade, 0);
-    const destinadas = batteries.filter((b) => ["recebida_pelo_destinador", "documentacao_pendente", "concluida"].includes(b.status))
+    const destinadas = batteries
+      .filter((b) =>
+        ["recebida_pelo_destinador", "documentacao_pendente", "concluida"].includes(b.status),
+      )
       .reduce((s, b) => s + b.quantidade, 0);
-    // Rough CO2 avoided estimate: ~2.5 kg CO2 per kg battery recycled (informative)
-    const co2 = kg * 2.5;
-    return { total, kwh, kg, destinadas, co2 };
+    return { total, kwh, kg, destinadas };
   }, [batteries]);
+
+  const saveFactor = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const fd = new FormData(form);
+    const numberOrNull = (name: string) => {
+      const value = String(fd.get(name) ?? "");
+      return value === "" ? null : Number(value);
+    };
+    try {
+      await workflowRpc("save_environmental_factor", {
+        _chemistry: String(fd.get("chemistry")),
+        _methodology: String(fd.get("methodology")),
+        _source: String(fd.get("source")),
+        _version: String(fd.get("version")),
+        _effective_from: String(fd.get("effectiveFrom")),
+        _min_weight_kg: Number(fd.get("minWeight")) || 0,
+        _max_weight_kg: numberOrNull("maxWeight"),
+        _composition: JSON.parse(String(fd.get("composition") || "{}")),
+        _lithium: numberOrNull("lithium"),
+        _nickel: numberOrNull("nickel"),
+        _cobalt: numberOrNull("cobalt"),
+        _copper: numberOrNull("copper"),
+        _avoided_emissions: numberOrNull("emissions"),
+      });
+      toast.success("Fator ambiental configurado");
+      form.reset();
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar fator");
+    }
+  };
 
   return (
     <div>
@@ -76,17 +159,27 @@ export function ReportsTab() {
         <div>
           <h1 className="text-xl font-display font-bold">Relatórios & indicadores</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Estimativas informativas. Validação por profissional habilitado é obrigatória antes de uso oficial.
+            Estimativas para fins gerenciais, sujeitas à validação técnica.
           </p>
         </div>
         <div className="flex gap-2 items-end">
           <label className="grid gap-1 text-xs">
             <span className="text-slate-400">De</span>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm" />
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm"
+            />
           </label>
           <label className="grid gap-1 text-xs">
             <span className="text-slate-400">Até</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm" />
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm"
+            />
           </label>
           <div className="flex gap-2">
             <button
@@ -120,7 +213,15 @@ export function ReportsTab() {
             <Kpi label="Destinação final" value={totals.destinadas} accent />
             <Kpi label="Capacidade total" value={`${totals.kwh.toFixed(1)} kWh`} />
             <Kpi label="Massa total" value={`${totals.kg.toFixed(0)} kg`} />
-            <Kpi label="CO₂ evitado (est.)" value={`${(totals.co2 / 1000).toFixed(1)} t`} accent />
+            <Kpi
+              label="Emissões potencialmente evitadas"
+              value={
+                environmental?.available && environmental.avoided_emissions_kgco2e !== null
+                  ? `${(environmental.avoided_emissions_kgco2e / 1000).toFixed(2)} t CO₂e`
+                  : "Indisponível"
+              }
+              accent
+            />
           </div>
 
           <div className="grid lg:grid-cols-2 gap-4 mb-4">
@@ -128,7 +229,9 @@ export function ReportsTab() {
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
                   <Pie data={byStatus} dataKey="value" nameKey="name" outerRadius={80} label>
-                    {byStatus.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    {byStatus.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
                   </Pie>
                   <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155" }} />
                   <Legend />
@@ -157,6 +260,160 @@ export function ReportsTab() {
               </BarChart>
             </ResponsiveContainer>
           </Panel>
+
+          <section className="mt-6 p-4 border border-white/10 rounded-md">
+            <h2 className="font-semibold mb-1">Indicadores ambientais calculados</h2>
+            <p className="text-xs text-slate-500 mb-3">
+              Estimativas para fins gerenciais, sujeitas à validação técnica.
+            </p>
+            {!environmental?.available ? (
+              <p className="text-sm text-amber-300">
+                Indicador indisponível — metodologia não configurada.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {[
+                  ["Massa processada", environmental.mass_processed_kg],
+                  ["Segunda vida", environmental.second_life_kg],
+                  ["Reciclagem", environmental.recycling_kg],
+                  ["Lítio recuperável", environmental.lithium_recoverable_kg],
+                  ["Níquel recuperável", environmental.nickel_recoverable_kg],
+                  ["Cobalto recuperável", environmental.cobalt_recoverable_kg],
+                  ["Cobre recuperável", environmental.copper_recoverable_kg],
+                ].map(([label, value]) => (
+                  <Kpi
+                    key={String(label)}
+                    label={String(label)}
+                    value={value === null ? "Indisponível" : `${Number(value).toFixed(2)} kg`}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="mt-4 p-4 border border-white/10 rounded-md">
+            <h2 className="font-semibold">Configuração de fatores ambientais</h2>
+            <p className="text-xs text-slate-500 mt-1 mb-3">
+              Nenhum número é presumido: os cálculos só usam fatores com metodologia, fonte, versão
+              e vigência registradas.
+            </p>
+            <form
+              onSubmit={(event) => void saveFactor(event)}
+              className="grid md:grid-cols-4 gap-2 text-sm"
+            >
+              <input
+                name="chemistry"
+                required
+                placeholder="Química"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="methodology"
+                required
+                placeholder="Metodologia"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="source"
+                required
+                placeholder="Fonte"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="version"
+                required
+                placeholder="Versão"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="effectiveFrom"
+                required
+                type="date"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="minWeight"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Peso mínimo kg"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="maxWeight"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Peso máximo kg"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="composition"
+                defaultValue="{}"
+                placeholder="Composição JSON"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="lithium"
+                type="number"
+                min="0"
+                step="0.000001"
+                placeholder="Li kg/kg"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="nickel"
+                type="number"
+                min="0"
+                step="0.000001"
+                placeholder="Ni kg/kg"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="cobalt"
+                type="number"
+                min="0"
+                step="0.000001"
+                placeholder="Co kg/kg"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="copper"
+                type="number"
+                min="0"
+                step="0.000001"
+                placeholder="Cu kg/kg"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <input
+                name="emissions"
+                type="number"
+                min="0"
+                step="0.000001"
+                placeholder="kg CO₂e evitado/kg"
+                className="px-3 py-2 bg-white/5 border border-white/10 rounded"
+              />
+              <button className="px-3 py-2 bg-brand text-industrial rounded font-semibold">
+                Salvar fator
+              </button>
+            </form>
+            <div className="grid gap-1 mt-4">
+              {factors.map((factor) => (
+                <div
+                  key={factor.id}
+                  className="text-xs p-2 bg-white/5 rounded flex flex-wrap justify-between gap-2"
+                >
+                  <span>
+                    {factor.chemistry} · {factor.methodology}
+                  </span>
+                  <span className="text-slate-400">
+                    Fonte: {factor.source} · v{factor.version} · vigência{" "}
+                    {new Date(`${factor.effective_from}T12:00:00`).toLocaleDateString("pt-BR")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
         </>
       )}
     </div>
@@ -172,20 +429,30 @@ export function AuditTab() {
 
   const load = async () => {
     setLoading(true);
-    let q = supabase.from("audit_log").select("*").order("created_at", { ascending: false }).limit(200);
+    let q = supabase
+      .from("audit_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
     if (entity) q = q.eq("entity_type", entity);
     const { data } = await q;
     setItems(data ?? []);
     setLoading(false);
   };
-  useEffect(() => { void load(); }, [entity]);
+  useEffect(() => {
+    void load();
+  }, [entity]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h1 className="text-xl font-display font-bold">Log de auditoria</h1>
         <div className="flex gap-2 items-end">
-          <select value={entity} onChange={(e) => setEntity(e.target.value)} className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm">
+          <select
+            value={entity}
+            onChange={(e) => setEntity(e.target.value)}
+            className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm"
+          >
             <option value="">Todas entidades</option>
             <option value="batteries">Baterias</option>
             <option value="lots">Lotes</option>
@@ -200,7 +467,9 @@ export function AuditTab() {
           </button>
         </div>
       </div>
-      <p className="text-xs text-slate-500 mb-3">Registros imutáveis. Não podem ser editados ou apagados.</p>
+      <p className="text-xs text-slate-500 mb-3">
+        Histórico de auditoria protegido contra alteração por usuários comuns.
+      </p>
       {loading ? (
         <p className="text-sm text-slate-400">Carregando...</p>
       ) : (
@@ -216,14 +485,26 @@ export function AuditTab() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-500">Sem registros.</td></tr>}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                    Sem registros.
+                  </td>
+                </tr>
+              )}
               {items.map((a) => (
                 <tr key={a.id} className="border-t border-white/5">
-                  <td className="px-3 py-2 text-xs text-slate-400">{new Date(a.created_at).toLocaleString("pt-BR")}</td>
+                  <td className="px-3 py-2 text-xs text-slate-400">
+                    {new Date(a.created_at).toLocaleString("pt-BR")}
+                  </td>
                   <td className="px-3 py-2 text-xs font-mono text-brand">{a.entity_type}</td>
                   <td className="px-3 py-2 text-xs">{a.action}</td>
-                  <td className="px-3 py-2 text-xs text-slate-300 font-mono truncate max-w-xs">{JSON.stringify(a.payload)}</td>
-                  <td className="px-3 py-2 text-[10px] text-slate-500 font-mono">{a.actor_id?.slice(0, 8) ?? "sistema"}</td>
+                  <td className="px-3 py-2 text-xs text-slate-300 font-mono truncate max-w-xs">
+                    {JSON.stringify(a.payload)}
+                  </td>
+                  <td className="px-3 py-2 text-[10px] text-slate-500 font-mono">
+                    {a.actor_id?.slice(0, 8) ?? "sistema"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -243,11 +524,27 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-function Kpi({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
+function Kpi({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  accent?: boolean;
+}) {
   return (
     <div className="p-4 rounded-md bg-white/5 border border-white/10">
-      <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mb-1">{label}</div>
-      <div className={accent ? "text-2xl font-display font-bold text-brand tabular-nums" : "text-2xl font-display font-bold tabular-nums"}>
+      <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mb-1">
+        {label}
+      </div>
+      <div
+        className={
+          accent
+            ? "text-2xl font-display font-bold text-brand tabular-nums"
+            : "text-2xl font-display font-bold tabular-nums"
+        }
+      >
         {value}
       </div>
     </div>

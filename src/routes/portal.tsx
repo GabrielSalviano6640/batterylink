@@ -34,11 +34,36 @@ export const Route = createFileRoute("/portal")({
 type Role = "gerador" | "operador" | "recicladora" | "transportadora" | "admin";
 
 const roles: { id: Role; label: string; icon: typeof BatteryCharging; desc: string }[] = [
-  { id: "gerador", label: "Gerador", icon: BatteryCharging, desc: "Acompanha status, baixa relatórios e certificados." },
-  { id: "operador", label: "Operador", icon: ShieldCheck, desc: "Análise, triagem, lotes, cotação e emissão de documentos." },
-  { id: "recicladora", label: "Recicladora", icon: Recycle, desc: "Lotes disponíveis, propostas e comprovantes de destinação." },
-  { id: "transportadora", label: "Transportadora", icon: Truck, desc: "Ordens de coleta, status em campo e comprovantes." },
-  { id: "admin", label: "Admin", icon: ShieldCheck, desc: "Usuários, permissões, contratos e ocorrências." },
+  {
+    id: "gerador",
+    label: "Gerador",
+    icon: BatteryCharging,
+    desc: "Acompanha status, baixa relatórios e certificados.",
+  },
+  {
+    id: "operador",
+    label: "Operador",
+    icon: ShieldCheck,
+    desc: "Análise, triagem, lotes, cotação e emissão de documentos.",
+  },
+  {
+    id: "recicladora",
+    label: "Recicladora",
+    icon: Recycle,
+    desc: "Lotes disponíveis, propostas e comprovantes de destinação.",
+  },
+  {
+    id: "transportadora",
+    label: "Transportadora",
+    icon: Truck,
+    desc: "Ordens de coleta, status em campo e comprovantes.",
+  },
+  {
+    id: "admin",
+    label: "Admin",
+    icon: ShieldCheck,
+    desc: "Usuários, permissões, contratos e ocorrências.",
+  },
 ];
 
 function PortalPage() {
@@ -242,10 +267,7 @@ function OperadorPanel() {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-brand"
-                      style={{ width: `${b.soh}%` }}
-                    />
+                    <div className="h-full bg-brand" style={{ width: `${b.soh}%` }} />
                   </div>
                   <span className="text-xs font-mono text-brand w-10 text-right">{b.soh}%</span>
                 </div>
@@ -284,7 +306,10 @@ function OperadorPanel() {
             { m: "Plataforma compra", v: "R$ 42.900", n: "5 contratos" },
             { m: "Modelo neutro", v: "R$ 7.100", n: "8 contratos" },
           ].map((f) => (
-            <div key={f.m} className="flex justify-between items-baseline py-2 border-b border-white/5 last:border-0">
+            <div
+              key={f.m}
+              className="flex justify-between items-baseline py-2 border-b border-white/5 last:border-0"
+            >
               <div>
                 <p className="text-sm">{f.m}</p>
                 <p className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
@@ -374,8 +399,7 @@ function TransportadoraPanel() {
               <div>
                 <p className="font-mono text-xs text-brand mb-1">{o.id}</p>
                 <p className="text-sm">
-                  {o.from} → {o.to}{" "}
-                  <span className="text-slate-500">· {o.w}</span>
+                  {o.from} → {o.to} <span className="text-slate-500">· {o.w}</span>
                 </p>
               </div>
               <button
@@ -480,11 +504,15 @@ function EnvironmentalDashboard() {
         <span className="text-xs text-slate-500">Período: últimos 90 dias</span>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Kpi label="Volume processado" value="4.8 t" Icon={Package} />
-        <Kpi label="Lítio recuperável" value="86 kg" Icon={Leaf} />
-        <Kpi label="Cobalto recuperável" value="42 kg" Icon={Leaf} />
-        <Kpi label="CO₂ evitado" value="12.4 t" Icon={Leaf} accent />
+        <Kpi label="Volume processado" value="Indicador indisponível" Icon={Package} />
+        <Kpi label="Lítio recuperável" value="Indicador indisponível" Icon={Leaf} />
+        <Kpi label="Cobalto recuperável" value="Indicador indisponível" Icon={Leaf} />
+        <Kpi label="CO₂ potencialmente evitado" value="Metodologia necessária" Icon={Leaf} accent />
       </div>
+      <p className="text-[10px] text-slate-500 mt-3">
+        Estimativas para fins gerenciais, sujeitas à validação técnica. Indicadores dependem de
+        metodologia configurada.
+      </p>
     </div>
   );
 }

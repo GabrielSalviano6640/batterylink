@@ -508,7 +508,20 @@ function CollectionDocumentModal({
     if (!(file instanceof File) || !file.size) return;
     setSaving(true);
     try {
-      await uploadPrivateDocument("collection", collection.id, String(fd.get("tipo")), file);
+      const type = String(fd.get("tipo"));
+      const uploaded = await uploadPrivateDocument("collection", collection.id, type, file);
+      if (type === "mtr") {
+        await workflowRpc("register_regulatory_document_metadata", {
+          _private_document_id: uploaded.id,
+          _number: String(fd.get("numero") || "") || null,
+          _issuer_system: String(fd.get("emissor") || "") || null,
+          _status: String(fd.get("status")),
+          _collection_id: collection.id,
+          _operation_id: null,
+          _responsible_validated: false,
+          _notes: String(fd.get("observacoes") || "") || null,
+        });
+      }
       toast.success("Documento anexado");
       onSaved();
     } catch (err) {
@@ -533,6 +546,18 @@ function CollectionDocumentModal({
           ]}
         />
         <Inp name="numero" label="Número (opcional)" />
+        <Inp name="emissor" label="Órgão ou sistema emissor" />
+        <Sel
+          name="status"
+          label="Status"
+          defaultValue="anexado"
+          options={[
+            { value: "registrado", label: "Registrado" },
+            { value: "anexado", label: "Anexado" },
+            { value: "em_validacao", label: "Em validação" },
+            { value: "validado", label: "Validado" },
+          ]}
+        />
         <input
           name="arquivo"
           type="file"
@@ -541,6 +566,10 @@ function CollectionDocumentModal({
           className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm"
         />
         <Inp name="observacoes" label="Observações" />
+        <p className="text-[10px] text-slate-500">
+          MTR: documento registrado ou anexado à operação. A emissão oficial deve ocorrer no sistema
+          ambiental competente.
+        </p>
         <button
           disabled={saving}
           className="px-4 py-2 bg-brand text-industrial rounded-md text-sm font-semibold disabled:opacity-50"

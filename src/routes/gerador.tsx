@@ -41,7 +41,7 @@ function GeradorPage() {
             "Um analista revisará as informações e fotos em até 2 dias úteis.",
             "Enviaremos por e-mail o pré-diagnóstico com classificação sugerida (segunda vida ou reciclagem).",
             "Após aprovação, agendamos a coleta com uma transportadora homologada.",
-            "Ao final do processo você receberá o Certificado de Destinação Final (CDF) e o relatório ambiental.",
+            "Ao final do processo, o CDF emitido ou validado pelo destinador responsável poderá ser anexado junto ao relatório ambiental.",
           ]}
         />
       </FormShell>
@@ -74,10 +74,22 @@ function GeradorPage() {
           </h2>
           <div className="grid md:grid-cols-2 gap-4">
             <Field label="Razão social / Nome" required>
-              <input required className={inputCls} name="razao_social" placeholder="Ex: Frota Alfa Ltda." />
+              <input
+                required
+                className={inputCls}
+                name="razao_social"
+                placeholder="Ex: Frota Alfa Ltda."
+              />
             </Field>
             <Field label="CNPJ / CPF" required>
-              <input required className={inputCls} name="documento" placeholder="00.000.000/0000-00" inputMode="numeric" onInput={maskInput(maskCPFOrCNPJ)} />
+              <input
+                required
+                className={inputCls}
+                name="documento"
+                placeholder="00.000.000/0000-00"
+                inputMode="numeric"
+                onInput={maskInput(maskCPFOrCNPJ)}
+              />
             </Field>
             <Field label="Responsável" required>
               <input required className={inputCls} name="responsavel" placeholder="Nome completo" />
@@ -86,10 +98,23 @@ function GeradorPage() {
               <input className={inputCls} placeholder="Ex: Gerente de manutenção" />
             </Field>
             <Field label="E-mail" required>
-              <input type="email" required className={inputCls} name="email" placeholder="voce@empresa.com" />
+              <input
+                type="email"
+                required
+                className={inputCls}
+                name="email"
+                placeholder="voce@empresa.com"
+              />
             </Field>
             <Field label="Telefone / WhatsApp" required>
-              <input required className={inputCls} name="phone" placeholder="(11) 90000-0000" inputMode="tel" onInput={maskInput(maskPhone)} />
+              <input
+                required
+                className={inputCls}
+                name="phone"
+                placeholder="(11) 90000-0000"
+                inputMode="tel"
+                onInput={maskInput(maskPhone)}
+              />
             </Field>
           </div>
         </section>
@@ -166,13 +191,26 @@ function GeradorPage() {
           </h2>
           <div className="grid md:grid-cols-3 gap-4">
             <Field label="CEP de origem" required>
-              <input required className={inputCls} name="cep" placeholder="00000-000" inputMode="numeric" onInput={maskInput(maskCEP)} />
+              <input
+                required
+                className={inputCls}
+                name="cep"
+                placeholder="00000-000"
+                inputMode="numeric"
+                onInput={maskInput(maskCEP)}
+              />
             </Field>
             <Field label="Cidade" required>
               <input required name="cidade" className={inputCls} />
             </Field>
             <Field label="UF" required>
-              <input required name="estado" maxLength={2} className={inputCls + " uppercase"} placeholder="SP" />
+              <input
+                required
+                name="estado"
+                maxLength={2}
+                className={inputCls + " uppercase"}
+                placeholder="SP"
+              />
             </Field>
           </div>
           <Field label="Endereço de coleta">

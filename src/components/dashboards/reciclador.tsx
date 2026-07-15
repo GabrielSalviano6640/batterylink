@@ -43,6 +43,10 @@ type ProposalView = {
   amount: number;
   currency: string | null;
   commercial_model: string | null;
+  payer_type: string | null;
+  recipient_type: string | null;
+  logistics_cost: number;
+  platform_fee: number;
   withdrawal_days: number | null;
   valid_until: string | null;
   destination: string | null;
@@ -121,8 +125,26 @@ export function RecicladorDashboard({ userId }: { userId: string }) {
 
   const load = async () => {
     try {
-      const result = await workflowRpc<DashboardData>("get_recycler_dashboard_data", {});
-      if (result) setData({ ...result, summary: { ...emptySummary, ...result.summary } });
+      const [result, commercialRows] = await Promise.all([
+        workflowRpc<DashboardData>("get_recycler_dashboard_data", {}),
+        supabase
+          .from("proposals")
+          .select("id,payer_type,recipient_type,logistics_cost,platform_fee"),
+      ]);
+      if (result) {
+        const commercial = new Map((commercialRows.data ?? []).map((row) => [row.id, row]));
+        setData({
+          ...result,
+          proposals: result.proposals.map((proposal) => ({
+            ...proposal,
+            payer_type: commercial.get(proposal.id)?.payer_type ?? null,
+            recipient_type: commercial.get(proposal.id)?.recipient_type ?? null,
+            logistics_cost: Number(commercial.get(proposal.id)?.logistics_cost ?? 0),
+            platform_fee: Number(commercial.get(proposal.id)?.platform_fee ?? 0),
+          })),
+          summary: { ...emptySummary, ...result.summary },
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao carregar painel");
     }
@@ -479,8 +501,15 @@ function ProposalsPanel({
               R$ {Number(p.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </div>
             <div className="text-xs text-slate-400">
-              {p.commercial_model ?? "Modelo não informado"} · retirada em{" "}
-              {p.withdrawal_days ?? "—"} dias
+              {commercialModelLabel(p.commercial_model)} · retirada em {p.withdrawal_days ?? "—"}{" "}
+              dias
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              Paga: {partyLabel(p.payer_type)} · Recebe: {partyLabel(p.recipient_type)}
+            </div>
+            <div className="text-xs text-slate-500">
+              Logística: {currency(p.logistics_cost)} · Taxa da plataforma:{" "}
+              {currency(p.platform_fee)}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -658,6 +687,10 @@ function ProposalModal({
           : null,
         _destination: String(fd.get("destination")),
         _submit: send,
+        _payer_type: String(fd.get("payer")),
+        _recipient_type: String(fd.get("recipient")),
+        _logistics_cost: Number(fd.get("logisticsCost")) || 0,
+        _platform_fee: Number(fd.get("platformFee")) || 0,
       });
       toast.success(send ? "Proposta enviada" : "Rascunho salvo");
       onSaved();
@@ -692,12 +725,47 @@ function ProposalModal({
           type="datetime-local"
           defaultValue={proposal?.valid_until?.slice(0, 16)}
         />
-        <Inp
+        <Sel
           name="model"
           label="Modelo comercial"
-          defaultValue={proposal?.commercial_model ?? "compra_lote"}
+          defaultValue={proposal?.commercial_model ?? "recicladora_compra_lote"}
           required
+          options={[
+            { value: "gerador_paga_destinacao", label: "Gerador paga pela destinação" },
+            { value: "recicladora_compra_lote", label: "Recicladora compra o lote" },
+            { value: "intermediacao_neutra", label: "Intermediação neutra" },
+          ]}
         />
+        <div className="grid md:grid-cols-2 gap-3">
+          <Sel
+            name="payer"
+            label="Quem paga"
+            defaultValue={proposal?.payer_type ?? "recicladora"}
+            options={commercialPartyOptions}
+          />
+          <Sel
+            name="recipient"
+            label="Quem recebe"
+            defaultValue={proposal?.recipient_type ?? "gerador"}
+            options={commercialPartyOptions}
+          />
+          <Inp
+            name="logisticsCost"
+            label="Custos logísticos (R$)"
+            type="number"
+            min="0"
+            step="0.01"
+            defaultValue={proposal?.logistics_cost ?? 0}
+          />
+          <Inp
+            name="platformFee"
+            label="Taxa da plataforma (R$)"
+            type="number"
+            min="0"
+            step="0.01"
+            defaultValue={proposal?.platform_fee ?? 0}
+          />
+        </div>
         <Inp
           name="destination"
           label="Destinação proposta"
@@ -713,6 +781,10 @@ function ProposalModal({
             className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm"
           />
         </label>
+        <p className="text-[10px] text-slate-500">
+          Esta etapa registra apenas os termos acordados. Nenhum pagamento bancário é processado
+          pela plataforma.
+        </p>
         <div className="flex justify-end gap-2">
           <button
             type="submit"
@@ -870,7 +942,20 @@ function OperationDocumentModal({
     if (!(file instanceof File) || !file.size) return;
     setSaving(true);
     try {
-      await uploadPrivateDocument("operation", operation.id, String(fd.get("type")), file);
+      const type = String(fd.get("type"));
+      const uploaded = await uploadPrivateDocument("operation", operation.id, type, file);
+      if (type === "cdf") {
+        await workflowRpc("register_regulatory_document_metadata", {
+          _private_document_id: uploaded.id,
+          _number: String(fd.get("number") || "") || null,
+          _issuer_system: String(fd.get("issuer") || "") || null,
+          _status: String(fd.get("status")),
+          _collection_id: null,
+          _operation_id: operation.id,
+          _responsible_validated: fd.get("responsibleValidated") === "on",
+          _notes: null,
+        });
+      }
       toast.success("Documento anexado");
       onSaved();
     } catch (err) {
@@ -891,11 +976,24 @@ function OperationDocumentModal({
             { value: "certificado_destinacao", label: "Certificado de destinação" },
             { value: "laudo_triagem", label: "Laudo" },
             { value: "cdf", label: "CDF" },
-            { value: "mtr", label: "MTR" },
             { value: "outro", label: "Outro" },
           ]}
         />
         <Inp name="number" label="Número" />
+        <Inp name="issuer" label="Órgão ou sistema emissor" />
+        <Sel
+          name="status"
+          label="Status"
+          defaultValue="anexado"
+          options={[
+            { value: "anexado", label: "Anexado" },
+            { value: "em_validacao", label: "Em validação" },
+            { value: "validado", label: "Validado" },
+          ]}
+        />
+        <label className="flex items-center gap-2 text-xs text-slate-300">
+          <input name="responsibleValidated" type="checkbox" /> Responsável pelo documento validado
+        </label>
         <input
           name="file"
           type="file"
@@ -903,6 +1001,11 @@ function OperationDocumentModal({
           accept=".pdf,image/*"
           className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm"
         />
+        <p className="text-[10px] text-slate-500">
+          MTR: documento registrado ou anexado à operação. A emissão oficial deve ocorrer no sistema
+          ambiental competente. CDF: certificado emitido ou validado pelo destinador responsável,
+          conforme o sistema ambiental aplicável.
+        </p>
         <button
           disabled={saving}
           className="px-4 py-2 bg-brand text-industrial rounded-md text-sm font-semibold inline-flex items-center justify-center gap-2"
@@ -912,6 +1015,41 @@ function OperationDocumentModal({
       </form>
     </Modal>
   );
+}
+
+const commercialPartyOptions = [
+  { value: "gerador", label: "Gerador" },
+  { value: "recicladora", label: "Recicladora" },
+  { value: "operador", label: "Operador" },
+  { value: "plataforma", label: "Plataforma" },
+  { value: "a_definir", label: "A definir" },
+];
+function commercialModelLabel(value: string | null) {
+  return (
+    (
+      {
+        gerador_paga_destinacao: "Gerador paga pela destinação",
+        recicladora_compra_lote: "Recicladora compra o lote",
+        intermediacao_neutra: "Intermediação neutra",
+      } as Record<string, string>
+    )[value ?? ""] ?? "Modelo não informado"
+  );
+}
+function partyLabel(value: string | null) {
+  return (
+    (
+      {
+        gerador: "Gerador",
+        recicladora: "Recicladora",
+        operador: "Operador",
+        plataforma: "Plataforma",
+        a_definir: "A definir",
+      } as Record<string, string>
+    )[value ?? ""] ?? "A definir"
+  );
+}
+function currency(value: number) {
+  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 function DestinationModal({
   operation,

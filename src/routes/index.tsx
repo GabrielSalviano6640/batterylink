@@ -69,11 +69,11 @@ const faqs = [
   },
   {
     q: "Como funciona a rastreabilidade?",
-    a: "Cada bateria, módulo, célula, coleta e lote recebe um identificador único e um QR Code. Toda alteração é registrada em log de auditoria imutável com usuário, ação, data e status anterior e novo.",
+    a: "Cada bateria, módulo, célula, coleta e lote recebe um identificador único e um QR Code. Toda alteração é registrada em histórico de auditoria protegido contra alteração por usuários comuns, com usuário, ação, data e status anterior e novo.",
   },
   {
     q: "Quais documentos são gerados?",
-    a: "Ordens de coleta, MTR digital, laudos de diagnóstico, comprovantes de transporte e recebimento, relatórios de recuperação e certificado final de destinação (CDF) com QR Code.",
+    a: "Ordens de coleta, MTR registrado ou anexado, laudos de diagnóstico, comprovantes de transporte e recebimento e CDF emitido ou validado pelo destinador responsável.",
   },
   {
     q: "Como é garantida a segurança dos dados?",
@@ -94,7 +94,7 @@ const flowSteps = [
     n: "01",
     icon: BatteryCharging,
     title: "Coleta na origem",
-    body: "Agendamento logístico com MTR digital, licenças verificadas e rastreamento por bateria ou lote.",
+    body: "Agendamento logístico com MTR registrado ou anexado, licenças verificadas e rastreamento por bateria ou lote.",
   },
   {
     n: "02",
@@ -112,7 +112,7 @@ const flowSteps = [
     n: "04",
     icon: FileCheck2,
     title: "Certificado & impacto",
-    body: "Emissão de laudo de destinação (CDF), relatório ambiental e materiais recuperáveis estimados.",
+    body: "Registro de CDF emitido ou validado pelo destinador, relatório ambiental e materiais recuperáveis estimados.",
   },
 ];
 
@@ -137,8 +137,8 @@ function Index() {
               <span className="text-white/40 italic">destinação inteligente</span> para baterias.
             </h1>
             <p className="text-lg md:text-xl text-slate-400 leading-relaxed mb-10 max-w-2xl">
-              Conectamos geradores, operadores logísticos, centros de triagem, parceiros de
-              segunda vida e recicladores em uma única plataforma segura e rastreável.
+              Conectamos geradores, operadores logísticos, centros de triagem, parceiros de segunda
+              vida e recicladores em uma única plataforma segura e rastreável.
             </p>
           </div>
 
@@ -219,7 +219,10 @@ function Index() {
             <li>• Identificador único e QR Code por bateria, módulo, célula, coleta e lote.</li>
             <li>• Fluxo de status ponta a ponta, do cadastro ao certificado de destinação.</li>
             <li>• Propostas, contratos e financeiro configuráveis por operação.</li>
-            <li>• Log de auditoria imutável e conformidade com PNRS e LGPD.</li>
+            <li>
+              • Histórico de auditoria protegido contra alteração por usuários comuns. Desenvolvida
+              para apoiar operações em conformidade com a PNRS e a LGPD.
+            </li>
           </ul>
         </div>
       </section>
@@ -251,7 +254,9 @@ function Index() {
             },
           ].map((b) => (
             <div key={b.title} className="p-6 rounded-xl border border-white/5 bg-panel/50">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-brand mb-3">{b.tag}</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-brand mb-3">
+                {b.tag}
+              </p>
               <h3 className="font-bold mb-2">{b.title}</h3>
               <p className="text-sm text-slate-400 leading-relaxed">{b.body}</p>
             </div>
@@ -263,14 +268,16 @@ function Index() {
       <section className="max-w-7xl mx-auto px-6 py-24 border-b border-white/5">
         <div className="grid md:grid-cols-2 gap-10">
           <div>
-            <span className="text-brand font-mono text-xs uppercase tracking-widest">Segurança & Conformidade</span>
+            <span className="text-brand font-mono text-xs uppercase tracking-widest">
+              Segurança & Conformidade
+            </span>
             <h2 className="text-3xl md:text-4xl font-display font-bold mt-2 italic mb-6">
-              LGPD, RBAC e auditoria imutável.
+              LGPD, RBAC e histórico de auditoria protegido.
             </h2>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Cada usuário enxerga apenas o que sua função permite. Dados comerciais sensíveis
-              nunca circulam entre concorrentes. Toda ação técnica ou comercial deixa um registro
-              imutável de auditoria.
+              Cada usuário enxerga apenas o que sua função permite. Dados comerciais sensíveis nunca
+              circulam entre concorrentes. Toda ação técnica ou comercial deixa um histórico de
+              auditoria protegido contra alteração por usuários comuns.
             </p>
           </div>
           <ul className="space-y-3 text-sm text-slate-300">
@@ -280,7 +287,7 @@ function Index() {
               "Ocultação de dados pessoais e comerciais antes da aprovação da operação.",
               "Log de auditoria com usuário, ação, IP, data, status anterior e novo.",
               "Preparado para autenticação em dois fatores e assinatura eletrônica.",
-              "Conformidade com PNRS (Lei 12.305/10) e LGPD (Lei 13.709/18).",
+              "Desenvolvida para apoiar operações em conformidade com a PNRS e a LGPD.",
             ].map((s) => (
               <li key={s} className="flex gap-3">
                 <span className="text-brand font-mono">›</span>
@@ -293,7 +300,6 @@ function Index() {
 
       {/* Fluxo operacional */}
       <section className="max-w-7xl mx-auto px-6 py-24">
-
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-14">
           <div>
             <span className="text-brand font-mono text-xs uppercase tracking-widest">
@@ -304,8 +310,8 @@ function Index() {
             </h2>
           </div>
           <p className="max-w-md text-slate-400 text-sm">
-            Cada bateria e cada lote têm linha do tempo auditável, do gerador até o
-            certificado final de destinação — com integração pronta para MTR e PNRS.
+            Cada bateria e cada lote têm linha do tempo auditável, do gerador até o certificado
+            final de destinação — com integração pronta para MTR e PNRS.
           </p>
         </div>
 
@@ -416,7 +422,10 @@ function Index() {
                       active: false,
                     },
                   ].map((e, i) => (
-                    <div key={i} className={e.active ? "relative pl-12" : "relative pl-12 opacity-60"}>
+                    <div
+                      key={i}
+                      className={e.active ? "relative pl-12" : "relative pl-12 opacity-60"}
+                    >
                       <div
                         className={
                           e.active
@@ -442,9 +451,21 @@ function Index() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-white/5 pt-8 mt-4">
                 {[
-                  { label: "Lítio estimado", value: "14.2 kg", accent: false },
-                  { label: "Cobalto estimado", value: "8.4 kg", accent: false },
-                  { label: "CO₂ evitado", value: "1.2 t", accent: true },
+                  {
+                    label: "Lítio potencialmente recuperável",
+                    value: "Indisponível",
+                    accent: false,
+                  },
+                  {
+                    label: "Cobalto potencialmente recuperável",
+                    value: "Indisponível",
+                    accent: false,
+                  },
+                  {
+                    label: "CO₂ potencialmente evitado",
+                    value: "Metodologia necessária",
+                    accent: true,
+                  },
                 ].map((m) => (
                   <div key={m.label} className="p-4 bg-white/5 rounded-lg">
                     <div className="text-slate-500 text-[10px] uppercase font-mono tracking-widest mb-1">
@@ -462,6 +483,9 @@ function Index() {
                   </div>
                 ))}
               </div>
+              <p className="text-[10px] text-slate-500 mt-3">
+                Estimativas para fins gerenciais, sujeitas à validação técnica.
+              </p>
             </div>
           </div>
         </div>
@@ -560,8 +584,8 @@ function Index() {
               Pronto para dar destinação correta às suas baterias?
             </h2>
             <p className="text-slate-400 mb-8">
-              Registre uma bateria em minutos ou fale com nossa equipe para desenhar um contrato
-              de logística reversa sob medida.
+              Registre uma bateria em minutos ou fale com nossa equipe para desenhar um contrato de
+              logística reversa sob medida.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link

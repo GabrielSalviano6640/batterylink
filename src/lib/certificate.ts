@@ -44,14 +44,14 @@ export function generateCertificate(battery: Battery, companyName?: string) {
   doc.setFontSize(10);
   doc.setTextColor(71, 85, 105);
   doc.text(
-    "Documento informativo emitido eletronicamente pela plataforma BatteryLink Brasil.",
+    "Documento informativo registrado eletronicamente na plataforma BatteryLink Brasil.",
     40,
-    148
+    148,
   );
   doc.text(
     "A validação regulatória oficial requer conferência por profissional habilitado.",
     40,
-    162
+    162,
   );
 
   // QR
@@ -63,12 +63,20 @@ export function generateCertificate(battery: Battery, companyName?: string) {
     ["Status", statusPt[battery.status] ?? battery.status],
     ["Origem", battery.origem],
     ["Química", battery.quimica],
-    ["Fabricante / Modelo", [battery.fabricante, battery.modelo].filter(Boolean).join(" / ") || "—"],
+    [
+      "Fabricante / Modelo",
+      [battery.fabricante, battery.modelo].filter(Boolean).join(" / ") || "—",
+    ],
     ["Capacidade", battery.capacidade_kwh ? `${battery.capacidade_kwh} kWh` : "—"],
     ["Quantidade", String(battery.quantidade)],
     ["Peso", battery.peso_kg ? `${battery.peso_kg} kg` : "—"],
     ["Localização", [battery.cidade, battery.uf].filter(Boolean).join("/") || "—"],
-    ["Classificação", battery.classificacao ? (classificationPt[battery.classificacao] ?? battery.classificacao) : "—"],
+    [
+      "Classificação",
+      battery.classificacao
+        ? (classificationPt[battery.classificacao] ?? battery.classificacao)
+        : "—",
+    ],
     ["Gerador (empresa)", companyName ?? "—"],
     ["Emitido em", new Date().toLocaleString("pt-BR")],
   ];

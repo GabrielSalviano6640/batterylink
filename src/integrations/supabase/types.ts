@@ -190,6 +190,7 @@ export type Database = {
         Row: {
           battery_id: string;
           bucket_id: string;
+          collection_id: string | null;
           created_at: string;
           deleted_at: string | null;
           id: string;
@@ -423,6 +424,7 @@ export type Database = {
       };
       documents: {
         Row: {
+          aviso_legal: string | null;
           battery_id: string | null;
           bucket_id: string;
           created_at: string;
@@ -438,7 +440,9 @@ export type Database = {
           numero_documento: string | null;
           observacoes: string | null;
           operation_id: string | null;
+          orgao_sistema_emissor: string | null;
           private_document_id: string | null;
+          responsavel_validado: boolean;
           status: string | null;
           tipo_documento: string | null;
           uploaded_by: string;
@@ -447,8 +451,10 @@ export type Database = {
           validado_por: string | null;
         };
         Insert: {
+          aviso_legal?: string | null;
           battery_id?: string | null;
           bucket_id?: string;
+          collection_id?: string | null;
           created_at?: string;
           data_emissao?: string | null;
           data_validade?: string | null;
@@ -462,7 +468,9 @@ export type Database = {
           numero_documento?: string | null;
           observacoes?: string | null;
           operation_id?: string | null;
+          orgao_sistema_emissor?: string | null;
           private_document_id?: string | null;
+          responsavel_validado?: boolean;
           status?: string | null;
           tipo_documento?: string | null;
           uploaded_by: string;
@@ -471,8 +479,10 @@ export type Database = {
           validado_por?: string | null;
         };
         Update: {
+          aviso_legal?: string | null;
           battery_id?: string | null;
           bucket_id?: string;
+          collection_id?: string | null;
           created_at?: string;
           data_emissao?: string | null;
           data_validade?: string | null;
@@ -486,7 +496,9 @@ export type Database = {
           numero_documento?: string | null;
           observacoes?: string | null;
           operation_id?: string | null;
+          orgao_sistema_emissor?: string | null;
           private_document_id?: string | null;
+          responsavel_validado?: boolean;
           status?: string | null;
           tipo_documento?: string | null;
           uploaded_by?: string;
@@ -751,8 +763,11 @@ export type Database = {
         Row: {
           body: string | null;
           created_at: string;
+          email_error: string | null;
+          email_status: string;
           entity_id: string | null;
           entity_type: string | null;
+          event_key: string | null;
           id: string;
           link: string | null;
           organization_id: string | null;
@@ -764,8 +779,11 @@ export type Database = {
         Insert: {
           body?: string | null;
           created_at?: string;
+          email_error?: string | null;
+          email_status?: string;
           entity_id?: string | null;
           entity_type?: string | null;
+          event_key?: string | null;
           id?: string;
           link?: string | null;
           organization_id?: string | null;
@@ -777,8 +795,11 @@ export type Database = {
         Update: {
           body?: string | null;
           created_at?: string;
+          email_error?: string | null;
+          email_status?: string;
           entity_id?: string | null;
           entity_type?: string | null;
+          event_key?: string | null;
           id?: string;
           link?: string | null;
           organization_id?: string | null;
@@ -799,14 +820,22 @@ export type Database = {
       };
       operations: {
         Row: {
+          agreed_value: number | null;
           carrier_organization_id: string | null;
           created_at: string;
+          financial_admin_note: string | null;
+          financial_due_date: string | null;
+          financial_status: string;
           generator_organization_id: string | null;
           id: string;
           lot_id: string;
+          logistics_cost: number;
           modelo_comercial: string | null;
           operator_organization_id: string | null;
+          payer_type: string | null;
+          payment_receipt_document_id: string | null;
           proposal_id: string;
+          recipient_type: string | null;
           recycler_organization_id: string | null;
           status: string;
           taxa_plataforma: number | null;
@@ -814,14 +843,22 @@ export type Database = {
           valor_operacao: number | null;
         };
         Insert: {
+          agreed_value?: number | null;
           carrier_organization_id?: string | null;
           created_at?: string;
+          financial_admin_note?: string | null;
+          financial_due_date?: string | null;
+          financial_status?: string;
           generator_organization_id?: string | null;
           id?: string;
           lot_id: string;
+          logistics_cost?: number;
           modelo_comercial?: string | null;
           operator_organization_id?: string | null;
+          payer_type?: string | null;
+          payment_receipt_document_id?: string | null;
           proposal_id: string;
+          recipient_type?: string | null;
           recycler_organization_id?: string | null;
           status?: string;
           taxa_plataforma?: number | null;
@@ -829,14 +866,22 @@ export type Database = {
           valor_operacao?: number | null;
         };
         Update: {
+          agreed_value?: number | null;
           carrier_organization_id?: string | null;
           created_at?: string;
+          financial_admin_note?: string | null;
+          financial_due_date?: string | null;
+          financial_status?: string;
           generator_organization_id?: string | null;
           id?: string;
           lot_id?: string;
+          logistics_cost?: number;
           modelo_comercial?: string | null;
           operator_organization_id?: string | null;
+          payer_type?: string | null;
+          payment_receipt_document_id?: string | null;
           proposal_id?: string;
+          recipient_type?: string | null;
           recycler_organization_id?: string | null;
           status?: string;
           taxa_plataforma?: number | null;
@@ -1027,10 +1072,14 @@ export type Database = {
           created_at: string;
           destinacao_proposta: string | null;
           id: string;
+          logistics_cost: number;
           lot_id: string;
           modelo_comercial: string | null;
           moeda: string | null;
+          payer_type: string | null;
+          platform_fee: number;
           prazo_retirada_dias: number | null;
+          recipient_type: string | null;
           reciclador_id: string;
           status: Database["public"]["Enums"]["proposal_status"];
           submitted_at: string | null;
@@ -1044,10 +1093,14 @@ export type Database = {
           created_at?: string;
           destinacao_proposta?: string | null;
           id?: string;
+          logistics_cost?: number;
           lot_id: string;
           modelo_comercial?: string | null;
           moeda?: string | null;
+          payer_type?: string | null;
+          platform_fee?: number;
           prazo_retirada_dias?: number | null;
+          recipient_type?: string | null;
           reciclador_id: string;
           status?: Database["public"]["Enums"]["proposal_status"];
           submitted_at?: string | null;
@@ -1061,10 +1114,14 @@ export type Database = {
           created_at?: string;
           destinacao_proposta?: string | null;
           id?: string;
+          logistics_cost?: number;
           lot_id?: string;
           modelo_comercial?: string | null;
           moeda?: string | null;
+          payer_type?: string | null;
+          platform_fee?: number;
           prazo_retirada_dias?: number | null;
+          recipient_type?: string | null;
           reciclador_id?: string;
           status?: Database["public"]["Enums"]["proposal_status"];
           submitted_at?: string | null;

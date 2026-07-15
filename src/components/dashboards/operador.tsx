@@ -984,6 +984,26 @@ function ManageLotModal({
                           minimumFractionDigits: 2,
                         })}
                       </div>
+                      <div className="text-xs text-slate-300 mt-1">
+                        {operatorCommercialModelLabel(p.modelo_comercial)}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        Paga: {operatorPartyLabel(p.payer_type)} · Recebe:{" "}
+                        {operatorPartyLabel(p.recipient_type)}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Custos logísticos: {operatorCurrency(p.logistics_cost)} · Taxa da
+                        plataforma: {operatorCurrency(p.platform_fee)}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Prazo: {p.prazo_retirada_dias ?? "—"} dias · Validade:{" "}
+                        {p.validade_proposta
+                          ? new Date(p.validade_proposta).toLocaleString("pt-BR")
+                          : "não informada"}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Destino proposto: {p.destinacao_proposta ?? "não informado"}
+                      </div>
                       {p.condicoes && (
                         <div className="text-xs text-slate-400 mt-1">{p.condicoes}</div>
                       )}
@@ -1052,6 +1072,32 @@ function OperationsTab() {
     }
   };
 
+  const updateFinancial = async (operation: Operation) => {
+    const status = window.prompt(
+      "Situação financeira: nao_aplicavel, aguardando_cobranca, cobranca_emitida, aguardando_pagamento, pago, vencido ou cancelado",
+      operation.financial_status,
+    );
+    if (!status) return;
+    const dueDate = window.prompt(
+      "Vencimento (AAAA-MM-DD, opcional):",
+      operation.financial_due_date ?? "",
+    );
+    const note = window.prompt("Observação administrativa:", operation.financial_admin_note ?? "");
+    try {
+      await workflowRpc("update_operation_financial", {
+        _operation_id: operation.id,
+        _status: status,
+        _due_date: dueDate || null,
+        _receipt_document_id: null,
+        _admin_note: note || null,
+      });
+      toast.success("Situação financeira registrada");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao atualizar financeiro");
+    }
+  };
+
   return (
     <div className="grid gap-3">
       {operations.length === 0 && (
@@ -1068,6 +1114,21 @@ function OperationsTab() {
               <div className="text-xs text-slate-500 mt-1">
                 {documentCounts[operation.id] ?? 0} documento(s) anexado(s)
               </div>
+              <div className="text-xs text-slate-400 mt-1">
+                Valor acordado:{" "}
+                {operatorCurrency(operation.agreed_value ?? operation.valor_operacao)} · Logística:{" "}
+                {operatorCurrency(operation.logistics_cost)} · Taxa:{" "}
+                {operatorCurrency(operation.taxa_plataforma)}
+              </div>
+              <div className="text-xs text-slate-500">
+                Financeiro: {operation.financial_status.replaceAll("_", " ")}
+                {operation.financial_due_date
+                  ? ` · vence em ${new Date(`${operation.financial_due_date}T12:00:00`).toLocaleDateString("pt-BR")}`
+                  : ""}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                Registro administrativo; nenhum pagamento bancário é processado nesta fase.
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <StatusBadge status={operation.status} />
@@ -1079,11 +1140,45 @@ function OperationsTab() {
                   Validar e concluir
                 </button>
               )}
+              <button
+                onClick={() => void updateFinancial(operation)}
+                className="px-3 py-1.5 border border-white/10 rounded-md text-xs"
+              >
+                Atualizar financeiro
+              </button>
             </div>
           </div>
         </div>
       ))}
     </div>
+  );
+}
+
+function operatorCurrency(value: number | null | undefined) {
+  return Number(value ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+function operatorPartyLabel(value: string | null) {
+  return (
+    (
+      {
+        gerador: "Gerador",
+        recicladora: "Recicladora",
+        operador: "Operador",
+        plataforma: "Plataforma",
+        a_definir: "A definir",
+      } as Record<string, string>
+    )[value ?? ""] ?? "A definir"
+  );
+}
+function operatorCommercialModelLabel(value: string | null) {
+  return (
+    (
+      {
+        gerador_paga_destinacao: "Gerador paga pela destinação",
+        recicladora_compra_lote: "Recicladora compra o lote",
+        intermediacao_neutra: "Intermediação neutra",
+      } as Record<string, string>
+    )[value ?? ""] ?? "Modelo não informado"
   );
 }
 

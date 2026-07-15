@@ -22,7 +22,6 @@ import {
   Truck,
   Upload,
   X,
-  Zap,
 } from "lucide-react";
 import { generateCertificate } from "@/lib/certificate";
 import { batteryStatusLabels, transitionBattery, workflowLabel, workflowRpc } from "@/lib/workflow";
@@ -40,6 +39,33 @@ type GeneratorSummary = {
   pending_documents: number;
   estimated_mass_kg: number;
   estimated_capacity_kwh: number;
+};
+
+type EnvironmentalIndicators = {
+  disclaimer: string;
+  available: boolean;
+  unavailable_message: string;
+  mass_processed_kg: number;
+  second_life_kg: number;
+  recycling_kg: number;
+  lithium_recoverable_kg: number | null;
+  nickel_recoverable_kg: number | null;
+  cobalt_recoverable_kg: number | null;
+  copper_recoverable_kg: number | null;
+  avoided_emissions_kgco2e: number | null;
+  methodologies: Array<{ methodology: string; source: string; version: string }>;
+};
+
+type DocumentTimeline = {
+  id: string;
+  type: string;
+  number: string | null;
+  issuer_system: string | null;
+  status: string;
+  responsible_validated: boolean;
+  legal_notice: string | null;
+  created_at: string;
+  validated_at: string | null;
 };
 
 type GeneratorContext = {
@@ -105,6 +131,7 @@ const triageStatuses = new Set(["recebida_na_triagem", "em_diagnostico"]);
 export function GeradorDashboard({ userId }: { userId: string }) {
   const [items, setItems] = useState<Battery[]>([]);
   const [summary, setSummary] = useState<GeneratorSummary | null>(null);
+  const [environmental, setEnvironmental] = useState<EnvironmentalIndicators | null>(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -123,9 +150,18 @@ export function GeradorDashboard({ userId }: { userId: string }) {
       .order("created_at", { ascending: false });
     setItems(data ?? []);
     try {
-      setSummary(await workflowRpc<GeneratorSummary>("get_generator_dashboard_summary", {}));
+      const [summaryData, environmentalData] = await Promise.all([
+        workflowRpc<GeneratorSummary>("get_generator_dashboard_summary", {}),
+        workflowRpc<EnvironmentalIndicators>("get_environmental_indicators", {
+          _from: null,
+          _to: null,
+        }),
+      ]);
+      setSummary(summaryData);
+      setEnvironmental(environmentalData);
     } catch {
       setSummary(null);
+      setEnvironmental(null);
     }
     setLoading(false);
   };
@@ -171,17 +207,6 @@ export function GeradorDashboard({ userId }: { userId: string }) {
     }),
     [items, summary],
   );
-
-  const environmental = useMemo(() => {
-    const completed = items.filter((b) => b.status === "concluida");
-    const massKg =
-      summary?.estimated_mass_kg ??
-      completed.reduce((sum, b) => sum + (Number(b.peso_kg) || 0) * b.quantidade, 0);
-    const capacityKwh =
-      summary?.estimated_capacity_kwh ??
-      completed.reduce((sum, b) => sum + (Number(b.capacidade_kwh) || 0) * b.quantidade, 0);
-    return { massKg, capacityKwh, co2Kg: massKg * 2.5 };
-  }, [items, summary]);
 
   if (detail) {
     return (
@@ -255,26 +280,38 @@ export function GeradorDashboard({ userId }: { userId: string }) {
             Estimativas
           </span>
         </div>
-        <div className="grid md:grid-cols-3 gap-3">
-          <EstimateCard
-            label="Massa destinada"
-            value={`${environmental.massKg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg`}
-            icon={<Scale className="w-4 h-4" />}
-          />
-          <EstimateCard
-            label="Capacidade encaminhada"
-            value={`${environmental.capacityKwh.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kWh`}
-            icon={<Zap className="w-4 h-4" />}
-          />
-          <EstimateCard
-            label="CO₂ potencialmente evitado"
-            value={`${environmental.co2Kg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg CO₂e`}
-            icon={<Leaf className="w-4 h-4" />}
-          />
-        </div>
+        {!environmental?.available ? (
+          <div className="p-4 border border-amber-400/20 rounded-md text-sm text-amber-300">
+            {environmental?.unavailable_message ??
+              "Indicador indisponível — metodologia não configurada."}
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+            {[
+              ["Massa processada", environmental.mass_processed_kg, "kg"],
+              ["Segunda vida", environmental.second_life_kg, "kg"],
+              ["Enviado à reciclagem", environmental.recycling_kg, "kg"],
+              ["Lítio recuperável", environmental.lithium_recoverable_kg, "kg"],
+              ["Níquel recuperável", environmental.nickel_recoverable_kg, "kg"],
+              ["Cobalto recuperável", environmental.cobalt_recoverable_kg, "kg"],
+              ["Cobre recuperável", environmental.copper_recoverable_kg, "kg"],
+              ["Emissões evitadas", environmental.avoided_emissions_kgco2e, "kg CO₂e"],
+            ].map(([label, value, unit]) => (
+              <EstimateCard
+                key={String(label)}
+                label={String(label)}
+                value={
+                  value === null
+                    ? "Indicador indisponível"
+                    : `${Number(value).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${unit}`
+                }
+                icon={<Scale className="w-4 h-4" />}
+              />
+            ))}
+          </div>
+        )}
         <p className="text-[10px] text-slate-500 mt-2">
-          Estimativas informativas baseadas nos dados cadastrados e em fator indicativo de 2,5 kg
-          CO₂e por kg destinado. Não substituem inventário ou laudo ambiental.
+          Estimativas para fins gerenciais, sujeitas à validação técnica.
         </p>
       </section>
 
@@ -630,25 +667,32 @@ function BatteryDetailPage({
   const [events, setEvents] = useState<EventRow[]>([]);
   const [files, setFiles] = useState<DisplayFile[]>([]);
   const [context, setContext] = useState<GeneratorContext | null>(null);
+  const [documentTimeline, setDocumentTimeline] = useState<DocumentTimeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
   const loadDetail = async () => {
     setLoading(true);
     try {
-      const [{ data: eventRows }, { data: fileRows }, detailContext] = await Promise.all([
-        supabase
-          .from("battery_events")
-          .select("*")
-          .eq("battery_id", battery.id)
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("battery_files")
-          .select("*")
-          .eq("battery_id", battery.id)
-          .order("created_at", { ascending: false }),
-        workflowRpc<GeneratorContext>("get_generator_battery_context", { _battery_id: battery.id }),
-      ]);
+      const [{ data: eventRows }, { data: fileRows }, detailContext, timelineDocuments] =
+        await Promise.all([
+          supabase
+            .from("battery_events")
+            .select("*")
+            .eq("battery_id", battery.id)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("battery_files")
+            .select("*")
+            .eq("battery_id", battery.id)
+            .order("created_at", { ascending: false }),
+          workflowRpc<GeneratorContext>("get_generator_battery_context", {
+            _battery_id: battery.id,
+          }),
+          workflowRpc<DocumentTimeline[]>("get_battery_document_timeline", {
+            _battery_id: battery.id,
+          }),
+        ]);
       const rows = fileRows ?? [];
       const withUrls = await Promise.all(
         rows.map(async (file) => {
@@ -662,6 +706,7 @@ function BatteryDetailPage({
       setEvents(eventRows ?? []);
       setFiles(withUrls);
       setContext(detailContext);
+      setDocumentTimeline(timelineDocuments ?? []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao carregar detalhes");
     } finally {
@@ -1000,6 +1045,28 @@ function BatteryDetailPage({
               {event.notes && <div className="text-xs text-slate-400">{event.notes}</div>}
               <div className="text-[10px] text-slate-500 font-mono">
                 {new Date(event.created_at).toLocaleString("pt-BR")}
+              </div>
+            </li>
+          ))}
+          {documentTimeline.map((document) => (
+            <li key={`document-${document.id}`} className="relative">
+              <span className="absolute -left-[21px] top-1 w-2 h-2 rounded-full bg-sky-400" />
+              <button
+                onClick={() => void openWorkflowDocument(document.id)}
+                className="text-sm font-semibold text-left hover:text-brand"
+              >
+                Documento {workflowLabel(document.type)}
+                {document.number ? ` · ${document.number}` : ""}
+              </button>
+              <div className="text-xs text-slate-400">
+                Status: {workflowLabel(document.status)}
+                {document.issuer_system ? ` · ${document.issuer_system}` : ""}
+              </div>
+              {document.legal_notice && (
+                <div className="text-[10px] text-slate-500 mt-1">{document.legal_notice}</div>
+              )}
+              <div className="text-[10px] text-slate-500 font-mono">
+                {new Date(document.created_at).toLocaleString("pt-BR")}
               </div>
             </li>
           ))}
