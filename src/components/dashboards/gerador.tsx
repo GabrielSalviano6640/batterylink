@@ -4,20 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { BatteryCharging, Plus, X, QrCode, FileDown } from "lucide-react";
 import { generateCertificate } from "@/lib/certificate";
+import { batteryStatusLabels, transitionBattery, workflowLabel } from "@/lib/workflow";
 
 type Battery = Tables<"batteries">;
-
-const statusLabels: Record<string, string> = {
-  registered: "Registrada",
-  triaging: "Em triagem",
-  classified: "Classificada",
-  in_lot: "Em lote",
-  collected: "Coletada",
-  delivered: "Entregue",
-  recycled: "Reciclada",
-  second_life: "Segunda vida",
-  rejected: "Recusada",
-};
 
 export function GeradorDashboard({ userId }: { userId: string }) {
   const [items, setItems] = useState<Battery[]>([]);
@@ -106,26 +95,57 @@ export function GeradorDashboard({ userId }: { userId: string }) {
       </div>
 
       {showForm && <NewBatteryModal userId={userId} onClose={() => setShowForm(false)} onCreated={() => { void load(); setShowForm(false); }} />}
-      {detail && <BatteryDetailModal battery={detail} onClose={() => setDetail(null)} />}
+      {detail && (
+        <BatteryDetailModal
+          battery={detail}
+          onClose={() => setDetail(null)}
+          onChanged={() => {
+            void load();
+            setDetail(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 export function StatusBadge({ status }: { status: string }) {
   const color: Record<string, string> = {
-    registered: "bg-slate-500/20 text-slate-300",
-    triaging: "bg-brand/20 text-brand",
-    classified: "bg-blue-500/20 text-blue-300",
-    in_lot: "bg-indigo-500/20 text-indigo-300",
-    collected: "bg-purple-500/20 text-purple-300",
-    delivered: "bg-teal-500/20 text-teal-300",
-    recycled: "bg-emerald-500/20 text-emerald-300",
-    second_life: "bg-emerald-500/20 text-emerald-300",
-    rejected: "bg-danger/20 text-danger",
+    cadastrada: "bg-slate-500/20 text-slate-300",
+    aguardando_analise: "bg-amber-500/20 text-amber-300",
+    informacoes_solicitadas: "bg-orange-500/20 text-orange-300",
+    aprovada_para_coleta: "bg-brand/20 text-brand",
+    coleta_agendada: "bg-cyan-500/20 text-cyan-300",
+    em_transporte: "bg-purple-500/20 text-purple-300",
+    recebida_na_triagem: "bg-teal-500/20 text-teal-300",
+    em_diagnostico: "bg-yellow-500/20 text-yellow-300",
+    classificada: "bg-blue-500/20 text-blue-300",
+    em_lote: "bg-indigo-500/20 text-indigo-300",
+    em_negociacao: "bg-violet-500/20 text-violet-300",
+    destinacao_definida: "bg-sky-500/20 text-sky-300",
+    enviada_ao_destinador: "bg-purple-500/20 text-purple-300",
+    recebida_pelo_destinador: "bg-teal-500/20 text-teal-300",
+    documentacao_pendente: "bg-amber-500/20 text-amber-300",
+    concluida: "bg-emerald-500/20 text-emerald-300",
+    em_quarentena: "bg-red-500/20 text-red-300",
+    cancelada: "bg-danger/20 text-danger",
+    publicado: "bg-brand/20 text-brand",
+    recebendo_propostas: "bg-violet-500/20 text-violet-300",
+    proposta_aceita: "bg-sky-500/20 text-sky-300",
+    contratado: "bg-cyan-500/20 text-cyan-300",
+    entregue: "bg-teal-500/20 text-teal-300",
+    concluido: "bg-emerald-500/20 text-emerald-300",
+    aceita: "bg-brand/20 text-brand",
+    recusada: "bg-danger/20 text-danger",
+    agendada: "bg-cyan-500/20 text-cyan-300",
+    retirada: "bg-purple-500/20 text-purple-300",
+    entregue_triagem: "bg-teal-500/20 text-teal-300",
+    entregue_destinador: "bg-teal-500/20 text-teal-300",
+    enviada: "bg-violet-500/20 text-violet-300",
   };
   return (
     <span className={`inline-block px-2 py-0.5 rounded text-xs font-mono ${color[status] ?? "bg-white/10"}`}>
-      {statusLabels[status] ?? status}
+      {workflowLabel(status)}
     </span>
   );
 }
@@ -154,12 +174,11 @@ function NewBatteryModal({ userId, onClose, onCreated }: { userId: string; onClo
         uf: String(fd.get("uf") || "") || null,
         endereco: String(fd.get("endereco") || "") || null,
         observacoes: String(fd.get("observacoes") || "") || null,
+        status: "cadastrada",
       };
       const { data, error } = await supabase.from("batteries").insert(payload).select().single();
       if (error) throw error;
-      await supabase.from("battery_events").insert({
-        battery_id: data.id, actor_id: userId, event_type: "created", notes: "Bateria registrada pelo gerador",
-      });
+      await transitionBattery(data.id, "aguardando_analise", "Cadastro enviado para análise do operador");
       toast.success(`Bateria ${data.code} registrada`);
       onCreated();
     } catch (err) {
@@ -204,13 +223,24 @@ function NewBatteryModal({ userId, onClose, onCreated }: { userId: string; onClo
 
 type EventRow = Tables<"battery_events">;
 
-function BatteryDetailModal({ battery, onClose }: { battery: Battery; onClose: () => void }) {
+function BatteryDetailModal({ battery, onClose, onChanged }: { battery: Battery; onClose: () => void; onChanged: () => void }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   useEffect(() => {
     void supabase.from("battery_events").select("*").eq("battery_id", battery.id).order("created_at", { ascending: true }).then(({ data }) => setEvents(data ?? []));
   }, [battery.id]);
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(battery.code)}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(battery.qr_code_data ?? battery.code)}`;
+
+  const resubmit = async () => {
+    const note = window.prompt("Informe o que foi atualizado para o operador:") ?? "Informações atualizadas pelo gerador";
+    try {
+      await transitionBattery(battery.id, "aguardando_analise", note);
+      toast.success("Bateria reenviada para análise");
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reenviar");
+    }
+  };
 
   return (
     <Modal onClose={onClose} title={battery.code}>
@@ -230,9 +260,17 @@ function BatteryDetailModal({ battery, onClose }: { battery: Battery; onClose: (
           <Row k="Estado">{battery.estado}</Row>
           <Row k="Urgência">{battery.urgencia}</Row>
           <Row k="Local">{[battery.cidade, battery.uf].filter(Boolean).join("/") || "—"}</Row>
-          {battery.classificacao && <Row k="Classificação">{battery.classificacao === "segunda_vida" ? "Segunda vida" : "Reciclagem"}</Row>}
+          {battery.classificacao && <Row k="Classificação">{battery.classificacao.replaceAll("_", " ")}</Row>}
           {battery.observacoes && <Row k="Observações">{battery.observacoes}</Row>}
-          {["delivered", "recycled", "second_life"].includes(battery.status) && (
+          {battery.status === "informacoes_solicitadas" && (
+            <button
+              onClick={() => void resubmit()}
+              className="mt-3 inline-flex items-center gap-1.5 self-start px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold"
+            >
+              Reenviar informações para análise
+            </button>
+          )}
+          {battery.status === "concluida" && (
             <button
               onClick={() => void generateCertificate(battery)}
               className="mt-3 inline-flex items-center gap-1.5 self-start px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold hover:brightness-110"
@@ -250,7 +288,7 @@ function BatteryDetailModal({ battery, onClose }: { battery: Battery; onClose: (
           {events.map((e) => (
             <li key={e.id} className="relative">
               <span className="absolute -left-[21px] top-1 w-2 h-2 rounded-full bg-brand" />
-              <div className="text-sm font-semibold">{e.event_type}</div>
+              <div className="text-sm font-semibold">{batteryStatusLabels[e.event_type] ?? workflowLabel(e.event_type)}</div>
               {e.notes && <div className="text-xs text-slate-400">{e.notes}</div>}
               <div className="text-[10px] text-slate-500 font-mono">{new Date(e.created_at).toLocaleString("pt-BR")}</div>
             </li>
