@@ -22,9 +22,7 @@ export function IntakeSuccess({ protocol, title, nextSteps }: IntakeSuccessProps
       </div>
 
       <div className="text-left bg-panel border border-white/10 rounded-2xl p-6 space-y-4 mb-8">
-        <p className="text-xs font-mono uppercase tracking-widest text-brand">
-          Próximos passos
-        </p>
+        <p className="text-xs font-mono uppercase tracking-widest text-brand">Próximos passos</p>
         <ol className="space-y-3">
           {nextSteps.map((step, i) => (
             <li key={i} className="flex gap-3 text-sm text-slate-300">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -143,7 +143,7 @@ export function GeradorDashboard({ userId }: { userId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState<Battery | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from("batteries")
@@ -166,11 +166,11 @@ export function GeradorDashboard({ userId }: { userId: string }) {
       setEnvironmental(null);
     }
     setLoading(false);
-  };
+  }, [userId]);
 
   useEffect(() => {
     void load();
-  }, [userId]);
+  }, [load]);
 
   const chemistries = useMemo(
     () => Array.from(new Set(items.map((b) => b.quimica))).sort(),
@@ -727,7 +727,7 @@ function BatteryDetailPage({
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
-  const loadDetail = async () => {
+  const loadDetail = useCallback(async () => {
     setLoading(true);
     try {
       const [{ data: eventRows }, { data: fileRows }, detailContext, timelineDocuments] =
@@ -768,11 +768,11 @@ function BatteryDetailPage({
     } finally {
       setLoading(false);
     }
-  };
+  }, [battery.id]);
 
   useEffect(() => {
     void loadDetail();
-  }, [battery.id]);
+  }, [loadDetail]);
 
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(battery.qr_code_data ?? battery.code)}`;
 

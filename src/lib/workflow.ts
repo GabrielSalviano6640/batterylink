@@ -76,10 +76,12 @@ export async function workflowRpc<T = unknown>(
   name: string,
   args: Record<string, unknown>,
 ): Promise<T | null> {
-  const { data, error } = (await (supabase.rpc as unknown as (
-    fn: string,
-    params: Record<string, unknown>,
-  ) => Promise<RpcResult<T>>)(name, args)) as RpcResult<T>;
+  const { data, error } = (await (
+    supabase.rpc as unknown as (
+      fn: string,
+      params: Record<string, unknown>,
+    ) => Promise<RpcResult<T>>
+  )(name, args)) as RpcResult<T>;
   if (error) throw new Error(error.message);
   return data;
 }

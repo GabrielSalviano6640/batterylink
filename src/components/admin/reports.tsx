@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -61,7 +61,7 @@ export function ReportsTab() {
   const [environmental, setEnvironmental] = useState<EnvironmentalIndicators | null>(null);
   const [factors, setFactors] = useState<EnvironmentalFactor[]>([]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const fromIso = new Date(from + "T00:00:00").toISOString();
     const toIso = new Date(to + "T23:59:59").toISOString();
@@ -81,10 +81,10 @@ export function ReportsTab() {
     setEnvironmental(indicators);
     setFactors(configuredFactors ?? []);
     setLoading(false);
-  };
+  }, [from, to]);
   useEffect(() => {
     void load();
-  }, [from, to]);
+  }, [load]);
 
   const byStatus = useMemo(() => {
     const m = new Map<string, number>();
@@ -427,7 +427,7 @@ export function AuditTab() {
   const [entity, setEntity] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     let q = supabase
       .from("audit_log")
@@ -438,10 +438,10 @@ export function AuditTab() {
     const { data } = await q;
     setItems(data ?? []);
     setLoading(false);
-  };
+  }, [entity]);
   useEffect(() => {
     void load();
-  }, [entity]);
+  }, [load]);
 
   return (
     <div>

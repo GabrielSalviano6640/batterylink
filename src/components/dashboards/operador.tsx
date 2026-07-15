@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -166,7 +166,7 @@ function BatteriesTab() {
   const [intakeQueue, setIntakeQueue] = useState<IntakeQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const [{ data }, { data: collectionRows }, carrierRows, queueRows] = await Promise.all([
       supabase.from("batteries").select("*").order("created_at", { ascending: false }),
@@ -179,10 +179,10 @@ function BatteriesTab() {
     setCarriers(carrierRows ?? []);
     setIntakeQueue(queueRows ?? []);
     setLoading(false);
-  };
+  }, []);
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   const filtered = items
     .filter(
@@ -733,16 +733,16 @@ function LotsTab({ userId }: { userId: string }) {
   const [showNew, setShowNew] = useState(false);
   const [manage, setManage] = useState<Lot | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const { data } = await supabase
       .from("lots")
       .select("*")
       .order("created_at", { ascending: false });
     setLots(data ?? []);
-  };
+  }, []);
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   return (
     <div>
@@ -886,7 +886,7 @@ function ManageLotModal({
   const [assigned, setAssigned] = useState<Battery[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [{ data: linked }, { data: props }] = await Promise.all([
       supabase.from("lot_batteries").select("battery_id").eq("lot_id", lot.id),
       supabase
@@ -907,10 +907,10 @@ function ManageLotModal({
       compatible.filter((b) => !linkedIds.includes(b.id) && b.status === "classificada"),
     );
     setProposals(props ?? []);
-  };
+  }, [lot.destino, lot.id]);
   useEffect(() => {
     void load();
-  }, [lot.id]);
+  }, [load]);
 
   const addBattery = async (b: Battery) => {
     try {
@@ -1118,7 +1118,7 @@ function OperationsTab() {
   const [operations, setOperations] = useState<Operation[]>([]);
   const [documentCounts, setDocumentCounts] = useState<Record<string, number>>({});
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [{ data: rows }, { data: docs }] = await Promise.all([
       supabase.from("operations").select("*").order("created_at", { ascending: false }),
       supabase.from("documents").select("operation_id").not("operation_id", "is", null),
@@ -1129,11 +1129,11 @@ function OperationsTab() {
       if (d.operation_id) counts[d.operation_id] = (counts[d.operation_id] ?? 0) + 1;
     });
     setDocumentCounts(counts);
-  };
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   const complete = async (operation: Operation) => {
     const notes = window.prompt("Observação da validação final:") ?? "Documentação validada";
@@ -1264,17 +1264,17 @@ function IncidentsTab() {
   const [items, setItems] = useState<Incident[]>([]);
   const [batteries, setBatteries] = useState<Battery[]>([]);
   const [showNew, setShowNew] = useState(false);
-  const load = async () => {
+  const load = useCallback(async () => {
     const [{ data: incidents }, { data: batteryRows }] = await Promise.all([
       supabase.from("incidents").select("*").order("created_at", { ascending: false }),
       supabase.from("batteries").select("*").order("created_at", { ascending: false }),
     ]);
     setItems(incidents ?? []);
     setBatteries(batteryRows ?? []);
-  };
+  }, []);
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
   const batteryCode = (id: string | null) => batteries.find((b) => b.id === id)?.code;
   return (
     <div>

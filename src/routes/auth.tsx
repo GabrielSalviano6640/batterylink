@@ -62,8 +62,8 @@ function AuthPage() {
           },
         });
         if (error) throw error;
-        // grava telefone e aceites no profile assim que a sessão existir
-        const uid = data.user?.id;
+
+        const uid = data.user?.id ?? data.session?.user?.id;
         if (uid) {
           const now = new Date().toISOString();
           await supabase
@@ -77,13 +77,22 @@ function AuthPage() {
             })
             .eq("id", uid);
         }
-        toast.success("Conta criada. Complete o cadastro da empresa para solicitar acesso.");
+
+        if (data.session?.user) {
+          toast.success("Conta criada. Seja bem-vindo.");
+          navigate({ to: "/app" });
+        } else {
+          toast.success(
+            "Conta criada. Verifique seu e-mail para ativar seu acesso antes de entrar.",
+          );
+          navigate({ to: "/auth", search: { mode: "signin" } });
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Bem-vindo de volta.");
+        navigate({ to: "/app" });
       }
-      navigate({ to: "/app" });
     } catch (err) {
       toast.error(translateAuthError(err));
     } finally {

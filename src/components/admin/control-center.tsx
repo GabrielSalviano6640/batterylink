@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Activity,
@@ -109,11 +109,11 @@ export function AdminControlCenter() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
 
-  const loadSummary = async () => {
+  const loadSummary = useCallback(async () => {
     const value = await workflowRpc<Summary>("get_admin_dashboard_summary", {});
     setSummary({ ...emptySummary, ...(value ?? {}) });
-  };
-  const loadRows = async () => {
+  }, []);
+  const loadRows = useCallback(async () => {
     setLoading(true);
     try {
       const value = await workflowRpc<Row[]>("admin_list_entities", {
@@ -126,16 +126,16 @@ export function AdminControlCenter() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [entity]);
   const reload = async () => {
     await Promise.all([loadSummary(), loadRows()]);
   };
   useEffect(() => {
     void loadSummary();
-  }, []);
+  }, [loadSummary]);
   useEffect(() => {
     void loadRows();
-  }, [entity]);
+  }, [loadRows]);
 
   const cards = [
     ["Organizações pendentes", summary.pending_organizations, Building2],

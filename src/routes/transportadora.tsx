@@ -78,13 +78,27 @@ function TransportadoraPage() {
               <input name="razao_social" required className={inputCls} />
             </Field>
             <Field label="CNPJ" required>
-              <input name="documento" required className={inputCls} placeholder="00.000.000/0000-00" inputMode="numeric" onInput={maskInput(maskCNPJ)} />
+              <input
+                name="documento"
+                required
+                className={inputCls}
+                placeholder="00.000.000/0000-00"
+                inputMode="numeric"
+                onInput={maskInput(maskCNPJ)}
+              />
             </Field>
             <Field label="Responsável operacional" required>
               <input name="responsavel" required className={inputCls} />
             </Field>
             <Field label="Telefone 24h" required>
-              <input name="phone" required className={inputCls} placeholder="(11) 90000-0000" inputMode="tel" onInput={maskInput(maskPhone)} />
+              <input
+                name="phone"
+                required
+                className={inputCls}
+                placeholder="(11) 90000-0000"
+                inputMode="tel"
+                onInput={maskInput(maskPhone)}
+              />
             </Field>
             <Field label="E-mail" required>
               <input name="email" type="email" required className={inputCls} />

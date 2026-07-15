@@ -12,15 +12,21 @@ import { AdminControlCenter } from "@/components/admin/control-center";
 
 export const Route = createFileRoute("/_authenticated/app/admin")({
   head: () => ({
-    meta: [
-      { title: "Admin — BatteryLink Brasil" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "Admin — BatteryLink Brasil" }, { name: "robots", content: "noindex" }],
   }),
   component: AdminPage,
 });
 
-type Tab = "control" | "requests" | "leads" | "users" | "companies" | "operations" | "finance" | "reports" | "audit";
+type Tab =
+  | "control"
+  | "requests"
+  | "leads"
+  | "users"
+  | "companies"
+  | "operations"
+  | "finance"
+  | "reports"
+  | "audit";
 
 function AdminPage() {
   const auth = useAuth();
@@ -50,7 +56,10 @@ function AdminPage() {
     <div className="min-h-screen bg-industrial flex flex-col">
       <header className="border-b border-white/10 bg-industrial/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <Link to="/app" className="flex items-center gap-2 text-sm text-slate-400 hover:text-brand">
+          <Link
+            to="/app"
+            className="flex items-center gap-2 text-sm text-slate-400 hover:text-brand"
+          >
             <ArrowLeft className="w-4 h-4" /> Painel
           </Link>
           <span className="font-display font-bold tracking-tight">Admin</span>
@@ -67,7 +76,9 @@ function AdminPage() {
               key={t.id}
               onClick={() => setTab(t.id)}
               className={`px-4 py-2 text-sm rounded-t-md -mb-px border-b-2 ${
-                tab === t.id ? "border-brand text-brand" : "border-transparent text-slate-400 hover:text-slate-200"
+                tab === t.id
+                  ? "border-brand text-brand"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
               {t.label}
@@ -135,7 +146,10 @@ function RequestsTab() {
 
   const load = async () => {
     setLoading(true);
-    let q = supabase.from("registration_requests").select("*").order("created_at", { ascending: false });
+    let q = supabase
+      .from("registration_requests")
+      .select("*")
+      .order("created_at", { ascending: false });
     if (filter === "pending") q = q.eq("status", "pending");
     const { data, error } = await q;
     if (error) toast.error(error.message);
@@ -149,8 +163,14 @@ function RequestsTab() {
   }, [filter]);
 
   const review = async (id: string, approve: boolean) => {
-    const notes = approve ? undefined : window.prompt("Motivo da recusa (opcional):") ?? undefined;
-    const { error } = await supabase.rpc("approve_registration", { _request_id: id, _approve: approve, _notes: notes });
+    const notes = approve
+      ? undefined
+      : (window.prompt("Motivo da recusa (opcional):") ?? undefined);
+    const { error } = await supabase.rpc("approve_registration", {
+      _request_id: id,
+      _approve: approve,
+      _notes: notes,
+    });
     if (error) toast.error(error.message);
     else {
       toast.success(approve ? "Aprovado" : "Recusado");
@@ -189,10 +209,17 @@ function RequestsTab() {
                     </div>
                     <div className="font-semibold mt-1">{data?.razao_social ?? "—"}</div>
                     <div className="text-xs text-slate-400 mt-1">
-                      CNPJ {data?.cnpj ?? "—"} · {data?.cidade ?? "—"}/{data?.estado ?? "—"} · Tel {data?.phone ?? "—"}
+                      CNPJ {data?.cnpj ?? "—"} · {data?.cidade ?? "—"}/{data?.estado ?? "—"} · Tel{" "}
+                      {data?.phone ?? "—"}
                     </div>
-                    <div className="text-xs text-slate-500 mt-2">Criado em {new Date(r.created_at).toLocaleString("pt-BR")}</div>
-                    {r.admin_notes && <div className="text-xs text-slate-400 mt-2 italic">Nota: {r.admin_notes}</div>}
+                    <div className="text-xs text-slate-500 mt-2">
+                      Criado em {new Date(r.created_at).toLocaleString("pt-BR")}
+                    </div>
+                    {r.admin_notes && (
+                      <div className="text-xs text-slate-400 mt-2 italic">
+                        Nota: {r.admin_notes}
+                      </div>
+                    )}
                   </div>
                   {r.status === "pending" && (
                     <div className="flex gap-2 shrink-0">
@@ -250,14 +277,22 @@ function UsersTab() {
   }, [roles]);
 
   const filtered = profiles.filter(
-    (p) => !q || (p.email ?? "").toLowerCase().includes(q.toLowerCase()) || (p.full_name ?? "").toLowerCase().includes(q.toLowerCase())
+    (p) =>
+      !q ||
+      (p.email ?? "").toLowerCase().includes(q.toLowerCase()) ||
+      (p.full_name ?? "").toLowerCase().includes(q.toLowerCase()),
   );
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-display font-bold">Usuários ({profiles.length})</h1>
-        <input placeholder="Buscar..." value={q} onChange={(e) => setQ(e.target.value)} className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm" />
+        <input
+          placeholder="Buscar..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm"
+        />
       </div>
       <div className="border border-white/10 rounded-md overflow-hidden">
         <table className="w-full text-sm">
@@ -276,8 +311,12 @@ function UsersTab() {
                 <td className="px-3 py-2">{p.full_name ?? "—"}</td>
                 <td className="px-3 py-2 text-slate-300">{p.email ?? "—"}</td>
                 <td className="px-3 py-2 text-xs">{p.status}</td>
-                <td className="px-3 py-2 text-xs font-mono text-brand">{(rolesByUser.get(p.id) ?? []).join(", ") || "—"}</td>
-                <td className="px-3 py-2 text-xs text-slate-500">{new Date(p.created_at).toLocaleDateString("pt-BR")}</td>
+                <td className="px-3 py-2 text-xs font-mono text-brand">
+                  {(rolesByUser.get(p.id) ?? []).join(", ") || "—"}
+                </td>
+                <td className="px-3 py-2 text-xs text-slate-500">
+                  {new Date(p.created_at).toLocaleDateString("pt-BR")}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -294,18 +333,28 @@ function CompaniesTab() {
   const [q, setQ] = useState("");
 
   useEffect(() => {
-    void supabase.from("companies").select("*").order("created_at", { ascending: false }).then(({ data }) => setItems(data ?? []));
+    void supabase
+      .from("companies")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setItems(data ?? []));
   }, []);
 
   const filtered = items.filter(
-    (c) => !q || c.razao_social.toLowerCase().includes(q.toLowerCase()) || (c.cnpj ?? "").includes(q)
+    (c) =>
+      !q || c.razao_social.toLowerCase().includes(q.toLowerCase()) || (c.cnpj ?? "").includes(q),
   );
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-display font-bold">Empresas ({items.length})</h1>
-        <input placeholder="Buscar por razão ou CNPJ..." value={q} onChange={(e) => setQ(e.target.value)} className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm" />
+        <input
+          placeholder="Buscar por razão ou CNPJ..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm"
+        />
       </div>
       <div className="border border-white/10 rounded-md overflow-hidden">
         <table className="w-full text-sm">
@@ -323,7 +372,9 @@ function CompaniesTab() {
                 <td className="px-3 py-2 font-semibold">{c.razao_social}</td>
                 <td className="px-3 py-2 font-mono text-xs">{c.cnpj ?? "—"}</td>
                 <td className="px-3 py-2 text-xs text-brand">{c.tipo}</td>
-                <td className="px-3 py-2 text-slate-400">{[c.cidade, c.estado].filter(Boolean).join("/") || "—"}</td>
+                <td className="px-3 py-2 text-slate-400">
+                  {[c.cidade, c.estado].filter(Boolean).join("/") || "—"}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -334,8 +385,18 @@ function CompaniesTab() {
 }
 
 function OperationsTab() {
-  const [counts, setCounts] = useState<{ batteries: number; lots: number; collections: number; delivered: number; recycled: number }>({
-    batteries: 0, lots: 0, collections: 0, delivered: 0, recycled: 0,
+  const [counts, setCounts] = useState<{
+    batteries: number;
+    lots: number;
+    collections: number;
+    delivered: number;
+    recycled: number;
+  }>({
+    batteries: 0,
+    lots: 0,
+    collections: 0,
+    delivered: 0,
+    recycled: 0,
   });
   const [recent, setRecent] = useState<Tables<"batteries">[]>([]);
 
@@ -345,13 +406,22 @@ function OperationsTab() {
         supabase.from("batteries").select("id", { count: "exact", head: true }),
         supabase.from("lots").select("id", { count: "exact", head: true }),
         supabase.from("collections").select("id", { count: "exact", head: true }),
-        supabase.from("batteries").select("id", { count: "exact", head: true }).in("status", ["recebida_pelo_destinador", "documentacao_pendente", "concluida"]),
-        supabase.from("batteries").select("id", { count: "exact", head: true }).eq("status", "concluida"),
+        supabase
+          .from("batteries")
+          .select("id", { count: "exact", head: true })
+          .in("status", ["recebida_pelo_destinador", "documentacao_pendente", "concluida"]),
+        supabase
+          .from("batteries")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "concluida"),
         supabase.from("batteries").select("*").order("created_at", { ascending: false }).limit(10),
       ]);
       setCounts({
-        batteries: b.count ?? 0, lots: l.count ?? 0, collections: c.count ?? 0,
-        delivered: del.count ?? 0, recycled: rec.count ?? 0,
+        batteries: b.count ?? 0,
+        lots: l.count ?? 0,
+        collections: c.count ?? 0,
+        delivered: del.count ?? 0,
+        recycled: rec.count ?? 0,
       });
       setRecent(rb.data ?? []);
     })();
@@ -386,7 +456,9 @@ function OperationsTab() {
                 <td className="px-3 py-2">{b.quimica}</td>
                 <td className="px-3 py-2">{b.quantidade}</td>
                 <td className="px-3 py-2 text-xs">{b.status}</td>
-                <td className="px-3 py-2 text-xs text-slate-500">{new Date(b.created_at).toLocaleDateString("pt-BR")}</td>
+                <td className="px-3 py-2 text-xs text-slate-500">
+                  {new Date(b.created_at).toLocaleDateString("pt-BR")}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -434,7 +506,8 @@ function FinanceTab() {
     <div>
       <h1 className="text-xl font-display font-bold mb-4">Financeiro</h1>
       <p className="text-xs text-slate-500 mb-4">
-        Valores derivados das propostas de reciclagem / segunda vida (visão informativa; a nota fiscal oficial deve ser emitida à parte).
+        Valores derivados das propostas de reciclagem / segunda vida (visão informativa; a nota
+        fiscal oficial deve ser emitida à parte).
       </p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <Kpi label="Propostas aceitas" value={totals.acceptedCount} />
@@ -454,14 +527,22 @@ function FinanceTab() {
           </thead>
           <tbody>
             {proposals.length === 0 && (
-              <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-500">Nenhuma proposta registrada.</td></tr>
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                  Nenhuma proposta registrada.
+                </td>
+              </tr>
             )}
             {proposals.map((p) => (
               <tr key={p.id} className="border-t border-white/5">
-                <td className="px-3 py-2 font-mono text-brand">{lotById.get(p.lot_id)?.code ?? "—"}</td>
+                <td className="px-3 py-2 font-mono text-brand">
+                  {lotById.get(p.lot_id)?.code ?? "—"}
+                </td>
                 <td className="px-3 py-2 text-xs">{p.status}</td>
                 <td className="px-3 py-2 tabular-nums">{fmt(Number(p.valor_total || 0))}</td>
-                <td className="px-3 py-2 text-xs text-slate-500">{new Date(p.created_at).toLocaleDateString("pt-BR")}</td>
+                <td className="px-3 py-2 text-xs text-slate-500">
+                  {new Date(p.created_at).toLocaleDateString("pt-BR")}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -471,11 +552,27 @@ function FinanceTab() {
   );
 }
 
-function Kpi({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
+function Kpi({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  accent?: boolean;
+}) {
   return (
     <div className="p-4 rounded-md bg-white/5 border border-white/10">
-      <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mb-1">{label}</div>
-      <div className={accent ? "text-2xl font-display font-bold text-brand tabular-nums" : "text-2xl font-display font-bold tabular-nums"}>
+      <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mb-1">
+        {label}
+      </div>
+      <div
+        className={
+          accent
+            ? "text-2xl font-display font-bold text-brand tabular-nums"
+            : "text-2xl font-display font-bold tabular-nums"
+        }
+      >
         {value}
       </div>
     </div>
@@ -500,10 +597,15 @@ function LeadsTab() {
     else setItems(data ?? []);
     setLoading(false);
   };
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filter, source]);
+  useEffect(() => {
+    void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [filter, source]);
 
   const setStatus = async (id: string, status: string) => {
-    const { error } = await supabase.from("leads").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await supabase
+      .from("leads")
+      .update({ status, reviewed_at: new Date().toISOString() })
+      .eq("id", id);
     if (error) toast.error(error.message);
     else void load();
   };
@@ -513,7 +615,11 @@ function LeadsTab() {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <h1 className="text-xl font-display font-bold">Leads públicos ({items.length})</h1>
         <div className="flex gap-2">
-          <select value={source} onChange={(e) => setSource(e.target.value)} className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm">
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm"
+          >
             <option value="all">Todas as origens</option>
             <option value="gerador">Gerador</option>
             <option value="recicladora">Recicladora</option>
@@ -521,7 +627,11 @@ function LeadsTab() {
             <option value="operador">Operador</option>
             <option value="contato">Contato</option>
           </select>
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm">
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-md text-sm"
+          >
             <option value="all">Todos</option>
             <option value="new">Novos</option>
             <option value="contacted">Contatados</option>
@@ -540,26 +650,51 @@ function LeadsTab() {
             <div key={l.id} className="p-4 bg-white/5 border border-white/10 rounded-md">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="text-[10px] font-mono uppercase text-brand tracking-widest">{l.source} · {l.status}</div>
-                  <div className="font-semibold mt-1">{l.razao_social ?? l.responsavel ?? l.email ?? "—"}</div>
+                  <div className="text-[10px] font-mono uppercase text-brand tracking-widest">
+                    {l.source} · {l.status}
+                  </div>
+                  <div className="font-semibold mt-1">
+                    {l.razao_social ?? l.responsavel ?? l.email ?? "—"}
+                  </div>
                   <div className="text-xs text-slate-400 mt-1 truncate">
-                    {[l.documento, l.email, l.phone, l.cidade && `${l.cidade}/${l.estado ?? ""}`].filter(Boolean).join(" · ")}
+                    {[l.documento, l.email, l.phone, l.cidade && `${l.cidade}/${l.estado ?? ""}`]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                   <details className="mt-2">
                     <summary className="text-xs text-slate-500 cursor-pointer">Ver payload</summary>
-                    <pre className="mt-2 p-2 bg-industrial rounded text-[10px] text-slate-300 overflow-x-auto max-w-full">{JSON.stringify(l.payload, null, 2)}</pre>
+                    <pre className="mt-2 p-2 bg-industrial rounded text-[10px] text-slate-300 overflow-x-auto max-w-full">
+                      {JSON.stringify(l.payload, null, 2)}
+                    </pre>
                   </details>
-                  <div className="text-[10px] text-slate-500 mt-2">Criado em {new Date(l.created_at).toLocaleString("pt-BR")}</div>
+                  <div className="text-[10px] text-slate-500 mt-2">
+                    Criado em {new Date(l.created_at).toLocaleString("pt-BR")}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
                   {l.status === "new" && (
-                    <button onClick={() => setStatus(l.id, "contacted")} className="px-2 py-1 border border-white/20 rounded text-[11px] hover:bg-white/5">Marcar contatado</button>
+                    <button
+                      onClick={() => setStatus(l.id, "contacted")}
+                      className="px-2 py-1 border border-white/20 rounded text-[11px] hover:bg-white/5"
+                    >
+                      Marcar contatado
+                    </button>
                   )}
                   {l.status !== "converted" && (
-                    <button onClick={() => setStatus(l.id, "converted")} className="px-2 py-1 border border-white/20 rounded text-[11px] hover:bg-white/5">Convertido</button>
+                    <button
+                      onClick={() => setStatus(l.id, "converted")}
+                      className="px-2 py-1 border border-white/20 rounded text-[11px] hover:bg-white/5"
+                    >
+                      Convertido
+                    </button>
                   )}
                   {l.status !== "discarded" && (
-                    <button onClick={() => setStatus(l.id, "discarded")} className="px-2 py-1 border border-white/20 rounded text-[11px] hover:bg-white/5">Descartar</button>
+                    <button
+                      onClick={() => setStatus(l.id, "discarded")}
+                      className="px-2 py-1 border border-white/20 rounded text-[11px] hover:bg-white/5"
+                    >
+                      Descartar
+                    </button>
                   )}
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -44,7 +44,7 @@ export function useAuth(): AuthState {
   const [loading, setLoading] = useState(true);
   const [impersonate, setImpersonate] = useState<AppRole | null>(getImpersonatedRole());
 
-  const loadMeta = async (userId: string) => {
+  const loadMeta = useCallback(async (userId: string) => {
     const [{ data: roleRows }, { data: profile }, { data: req }] = await Promise.all([
       supabase.from("user_roles").select("role").eq("user_id", userId),
       supabase
@@ -64,9 +64,9 @@ export function useAuth(): AuthState {
     setIsDemo(Boolean(profile?.is_demo));
     setTimeZone(profile?.timezone || "America/Sao_Paulo");
     setHasPendingRequest((req ?? []).length > 0);
-  };
+  }, []);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     setSession(data.session);
     if (data.session?.user) await loadMeta(data.session.user.id);
@@ -77,7 +77,7 @@ export function useAuth(): AuthState {
       setIsDemo(false);
       setTimeZone("America/Sao_Paulo");
     }
-  };
+  }, [loadMeta]);
 
   useEffect(() => {
     let mounted = true;
@@ -105,7 +105,7 @@ export function useAuth(): AuthState {
       window.removeEventListener("impersonate-change", onImp);
       window.removeEventListener("storage", onImp);
     };
-  }, []);
+  }, [refresh, loadMeta]);
 
   const realRole: AppRole | null = roles.includes("admin") ? "admin" : (roles[0] ?? null);
   const effective: AppRole | null = realRole === "admin" && impersonate ? impersonate : realRole;

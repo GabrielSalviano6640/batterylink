@@ -13,11 +13,21 @@ export function SiteNav() {
           </span>
         </Link>
         <div className="hidden md:flex gap-6 text-sm font-medium text-slate-400">
-          <Link to="/gerador" className="hover:text-brand transition-colors">Geradores</Link>
-          <Link to="/recicladora" className="hover:text-brand transition-colors">Recicladoras</Link>
-          <Link to="/transportadora" className="hover:text-brand transition-colors">Logística</Link>
-          <Link to="/operador" className="hover:text-brand transition-colors">Triagem</Link>
-          <Link to="/portal" className="hover:text-brand transition-colors">Rastreabilidade</Link>
+          <Link to="/gerador" className="hover:text-brand transition-colors">
+            Geradores
+          </Link>
+          <Link to="/recicladora" className="hover:text-brand transition-colors">
+            Recicladoras
+          </Link>
+          <Link to="/transportadora" className="hover:text-brand transition-colors">
+            Logística
+          </Link>
+          <Link to="/operador" className="hover:text-brand transition-colors">
+            Triagem
+          </Link>
+          <Link to="/portal" className="hover:text-brand transition-colors">
+            Rastreabilidade
+          </Link>
         </div>
         <Link
           to="/auth"

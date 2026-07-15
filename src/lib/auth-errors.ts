@@ -9,8 +9,10 @@ const MAP: Record<string, string> = {
   "password should be at least 6 characters": "A senha deve ter no mínimo 6 caracteres.",
   "signup is disabled": "Cadastros estão temporariamente desabilitados.",
   "unable to validate email address: invalid format": "Formato de e-mail inválido.",
-  "for security purposes, you can only request this after": "Aguarde alguns segundos antes de tentar novamente.",
-  "new password should be different from the old password": "A nova senha deve ser diferente da anterior.",
+  "for security purposes, you can only request this after":
+    "Aguarde alguns segundos antes de tentar novamente.",
+  "new password should be different from the old password":
+    "A nova senha deve ser diferente da anterior.",
   "email rate limit exceeded": "Muitos e-mails enviados. Tente novamente em instantes.",
   "over email send rate limit": "Muitos e-mails enviados. Tente novamente em instantes.",
 };

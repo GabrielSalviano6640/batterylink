@@ -85,7 +85,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "Plataforma B2B para rastreabilidade, triagem, logística reversa e destinação de baterias de veículos elétricos, frotas e sistemas de armazenamento de energia.",
       },
       { name: "author", content: "BatteryLink Brasil" },
-      { property: "og:title", content: "BatteryLink Brasil — Baterias EV com destinação inteligente" },
+      {
+        property: "og:title",
+        content: "BatteryLink Brasil — Baterias EV com destinação inteligente",
+      },
       {
         property: "og:description",
         content:
