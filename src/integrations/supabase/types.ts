@@ -1287,31 +1287,59 @@ export type Database = {
         | "reciclador"
         | "transportadora"
         | "operador"
-      battery_classification: "segunda_vida" | "reciclagem"
+      battery_classification:
+        | "segunda_vida"
+        | "reutilizacao_componentes"
+        | "reciclagem_mecanica"
+        | "reciclagem_quimica"
+        | "quarentena_tecnica"
+        | "descarte_controlado"
+        | "aguardando_analise"
       battery_status:
-        | "registered"
-        | "triaging"
-        | "classified"
-        | "in_lot"
-        | "collected"
-        | "delivered"
-        | "recycled"
-        | "second_life"
-        | "rejected"
+        | "rascunho"
+        | "cadastrada"
+        | "aguardando_analise"
+        | "informacoes_solicitadas"
+        | "aprovada_para_coleta"
+        | "coleta_agendada"
+        | "em_transporte"
+        | "recebida_na_triagem"
+        | "em_diagnostico"
+        | "classificada"
+        | "em_lote"
+        | "em_negociacao"
+        | "destinacao_definida"
+        | "enviada_ao_destinador"
+        | "recebida_pelo_destinador"
+        | "documentacao_pendente"
+        | "concluida"
+        | "em_quarentena"
+        | "cancelada"
       collection_status:
-        | "available"
-        | "accepted"
-        | "in_transit"
-        | "delivered"
-        | "cancelled"
+        | "ordem_criada"
+        | "aceita"
+        | "recusada"
+        | "agendada"
+        | "retirada"
+        | "em_transporte"
+        | "entregue_triagem"
+        | "entregue_destinador"
+        | "cancelada"
       lot_destination: "reciclagem" | "segunda_vida"
       lot_status:
-        | "open"
-        | "published"
-        | "negotiating"
-        | "awarded"
-        | "shipped"
-        | "closed"
+        | "rascunho"
+        | "em_formacao"
+        | "pronto_para_publicacao"
+        | "publicado"
+        | "recebendo_propostas"
+        | "em_analise"
+        | "proposta_aceita"
+        | "contratado"
+        | "em_transporte"
+        | "entregue"
+        | "documentacao_pendente"
+        | "concluido"
+        | "cancelado"
       org_member_role:
         | "proprietario"
         | "gestor"
@@ -1326,7 +1354,14 @@ export type Database = {
         | "aprovada"
         | "suspensa"
         | "rejeitada"
-      proposal_status: "submitted" | "accepted" | "rejected" | "withdrawn"
+      proposal_status:
+        | "rascunho"
+        | "enviada"
+        | "em_analise"
+        | "aceita"
+        | "recusada"
+        | "cancelada"
+        | "expirada"
       request_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
@@ -1462,33 +1497,62 @@ export const Constants = {
         "transportadora",
         "operador",
       ],
-      battery_classification: ["segunda_vida", "reciclagem"],
+      battery_classification: [
+        "segunda_vida",
+        "reutilizacao_componentes",
+        "reciclagem_mecanica",
+        "reciclagem_quimica",
+        "quarentena_tecnica",
+        "descarte_controlado",
+        "aguardando_analise",
+      ],
       battery_status: [
-        "registered",
-        "triaging",
-        "classified",
-        "in_lot",
-        "collected",
-        "delivered",
-        "recycled",
-        "second_life",
-        "rejected",
+        "rascunho",
+        "cadastrada",
+        "aguardando_analise",
+        "informacoes_solicitadas",
+        "aprovada_para_coleta",
+        "coleta_agendada",
+        "em_transporte",
+        "recebida_na_triagem",
+        "em_diagnostico",
+        "classificada",
+        "em_lote",
+        "em_negociacao",
+        "destinacao_definida",
+        "enviada_ao_destinador",
+        "recebida_pelo_destinador",
+        "documentacao_pendente",
+        "concluida",
+        "em_quarentena",
+        "cancelada",
       ],
       collection_status: [
-        "available",
-        "accepted",
-        "in_transit",
-        "delivered",
-        "cancelled",
+        "ordem_criada",
+        "aceita",
+        "recusada",
+        "agendada",
+        "retirada",
+        "em_transporte",
+        "entregue_triagem",
+        "entregue_destinador",
+        "cancelada",
       ],
       lot_destination: ["reciclagem", "segunda_vida"],
       lot_status: [
-        "open",
-        "published",
-        "negotiating",
-        "awarded",
-        "shipped",
-        "closed",
+        "rascunho",
+        "em_formacao",
+        "pronto_para_publicacao",
+        "publicado",
+        "recebendo_propostas",
+        "em_analise",
+        "proposta_aceita",
+        "contratado",
+        "em_transporte",
+        "entregue",
+        "documentacao_pendente",
+        "concluido",
+        "cancelado",
       ],
       org_member_role: [
         "proprietario",
@@ -1506,7 +1570,15 @@ export const Constants = {
         "suspensa",
         "rejeitada",
       ],
-      proposal_status: ["submitted", "accepted", "rejected", "withdrawn"],
+      proposal_status: [
+        "rascunho",
+        "enviada",
+        "em_analise",
+        "aceita",
+        "recusada",
+        "cancelada",
+        "expirada",
+      ],
       request_status: ["pending", "approved", "rejected"],
     },
   },
