@@ -4,12 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { ShieldCheck, Package, Send } from "lucide-react";
 import { Modal, StatusBadge, Inp, Sel } from "./gerador";
+import { workflowRpc } from "@/lib/workflow";
 
 type Battery = Tables<"batteries">;
 type Lot = Tables<"lots">;
+type Collection = Tables<"collections">;
+type Operation = Tables<"operations">;
 
 export function OperadorDashboard({ userId }: { userId: string }) {
-  const [tab, setTab] = useState<"batteries" | "lots">("batteries");
+  const [tab, setTab] = useState<"batteries" | "lots" | "operations">("batteries");
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
@@ -19,27 +22,38 @@ export function OperadorDashboard({ userId }: { userId: string }) {
       <h1 className="text-2xl font-display font-bold mb-6">Triagem & lotes</h1>
 
       <div className="flex gap-2 mb-4 border-b border-white/10">
-        {(["batteries","lots"] as const).map((t) => (
+        {(["batteries","lots","operations"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm border-b-2 -mb-px ${tab===t?"border-brand text-brand":"border-transparent text-slate-400"}`}>
-            {t === "batteries" ? "Baterias" : "Lotes"}
+            {t === "batteries" ? "Baterias" : t === "lots" ? "Lotes" : "Operações"}
           </button>
         ))}
       </div>
 
-      {tab === "batteries" ? <BatteriesTab userId={userId} /> : <LotsTab userId={userId} />}
+      {tab === "batteries" ? (
+        <BatteriesTab userId={userId} />
+      ) : tab === "lots" ? (
+        <LotsTab userId={userId} />
+      ) : (
+        <OperationsTab />
+      )}
     </div>
   );
 }
 
 function BatteriesTab({ userId }: { userId: string }) {
   const [items, setItems] = useState<Battery[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [triage, setTriage] = useState<Battery | null>(null);
 
   const load = async () => {
-    const { data } = await supabase.from("batteries").select("*").order("created_at", { ascending: false });
+    const [{ data }, { data: collectionRows }] = await Promise.all([
+      supabase.from("batteries").select("*").order("created_at", { ascending: false }),
+      supabase.from("collections").select("*").order("created_at", { ascending: false }),
+    ]);
     setItems(data ?? []);
+    setCollections(collectionRows ?? []);
   };
   useEffect(() => { void load(); }, []);
 
@@ -51,10 +65,12 @@ function BatteriesTab({ userId }: { userId: string }) {
         <input placeholder="Buscar código..." value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 min-w-[180px] px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm" />
         <select value={filter} onChange={(e) => setFilter(e.target.value)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm">
           <option value="all">Todos os status</option>
-          <option value="registered">Registradas (aguardando triagem)</option>
-          <option value="triaging">Em triagem</option>
-          <option value="classified">Classificadas</option>
-          <option value="in_lot">Em lote</option>
+          <option value="aguardando_analise">Aguardando análise</option>
+          <option value="aprovada_para_coleta">Aprovadas para coleta</option>
+          <option value="recebida_na_triagem">Recebidas na triagem</option>
+          <option value="em_diagnostico">Em diagnóstico</option>
+          <option value="classificada">Classificadas</option>
+          <option value="em_lote">Em lote</option>
         </select>
       </div>
       <div className="border border-white/10 rounded-md overflow-hidden">
@@ -80,7 +96,12 @@ function BatteriesTab({ userId }: { userId: string }) {
                 <td className="px-3 py-2">{b.estado}</td>
                 <td className="px-3 py-2"><StatusBadge status={b.status} /></td>
                 <td className="px-3 py-2">
-                  <button onClick={() => setTriage(b)} className="text-brand text-xs hover:brightness-125">Triar / classificar</button>
+                  <BatteryAction
+                    battery={b}
+                    collections={collections}
+                    onTriage={() => setTriage(b)}
+                    onChanged={() => void load()}
+                  />
                 </td>
               </tr>
             ))}
@@ -92,26 +113,156 @@ function BatteriesTab({ userId }: { userId: string }) {
   );
 }
 
+function BatteryAction({
+  battery,
+  collections,
+  onTriage,
+  onChanged,
+}: {
+  battery: Battery;
+  collections: Collection[];
+  onTriage: () => void;
+  onChanged: () => void;
+}) {
+  const run = async (fn: () => Promise<unknown>, success: string) => {
+    try {
+      await fn();
+      toast.success(success);
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro no fluxo");
+    }
+  };
+
+  if (battery.status === "aguardando_analise") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => void run(
+            () => workflowRpc("review_battery_request", {
+              _battery_id: battery.id,
+              _decision: "aceitar",
+              _reason: "Solicitação aprovada para coleta",
+              _organization_id: null,
+            }),
+            "Bateria aprovada para coleta",
+          )}
+          className="text-brand text-xs"
+        >
+          Aprovar
+        </button>
+        <button
+          onClick={() => {
+            const reason = window.prompt("Quais informações o gerador deve complementar?");
+            if (!reason) return;
+            void run(
+              () => workflowRpc("review_battery_request", {
+                _battery_id: battery.id,
+                _decision: "solicitar_informacoes",
+                _reason: reason,
+                _organization_id: null,
+              }),
+              "Informações solicitadas",
+            );
+          }}
+          className="text-amber-300 text-xs"
+        >
+          Solicitar dados
+        </button>
+      </div>
+    );
+  }
+
+  if (battery.status === "aprovada_para_coleta") {
+    return (
+      <button
+        onClick={() => void run(
+          () => workflowRpc("create_collection_order", {
+            _battery_id: battery.id,
+            _origin: battery.endereco ?? `${battery.cidade ?? ""}/${battery.uf ?? ""}`,
+            _destination: "Centro de triagem BatteryLink",
+            _operator_organization_id: null,
+            _carrier_organization_id: null,
+          }),
+          "Ordem de coleta criada",
+        )}
+        className="text-brand text-xs"
+      >
+        Criar coleta
+      </button>
+    );
+  }
+
+  if (battery.status === "em_transporte") {
+    const delivered = collections.find(
+      (c) => c.battery_id === battery.id && c.status === "entregue_triagem",
+    );
+    if (delivered) {
+      return (
+        <button
+          onClick={() => void run(
+            () => workflowRpc("confirm_triage_receipt", {
+              _collection_id: delivered.id,
+              _reason: "Material conferido e recebido no centro de triagem",
+              _organization_id: null,
+            }),
+            "Recebimento confirmado",
+          )}
+          className="text-brand text-xs"
+        >
+          Confirmar recebimento
+        </button>
+      );
+    }
+  }
+
+  if (battery.status === "recebida_na_triagem") {
+    return (
+      <button
+        onClick={() => void run(
+          () => workflowRpc("start_battery_diagnostic", {
+            _battery_id: battery.id,
+            _organization_id: null,
+          }),
+          "Diagnóstico iniciado",
+        )}
+        className="text-brand text-xs"
+      >
+        Iniciar diagnóstico
+      </button>
+    );
+  }
+
+  if (battery.status === "em_diagnostico") {
+    return <button onClick={onTriage} className="text-brand text-xs">Registrar diagnóstico</button>;
+  }
+
+  return <span className="text-xs text-slate-500">Aguardando próxima etapa</span>;
+}
+
 function TriageModal({ battery, userId, onClose, onSaved }: { battery: Battery; userId: string; onClose: () => void; onSaved: () => void }) {
   const [saving, setSaving] = useState(false);
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const classificacao = String(fd.get("classificacao")) as "segunda_vida" | "reciclagem";
+    const classificacao = String(fd.get("classificacao"));
     const soh = Number(fd.get("soh") || 0);
     const notas = String(fd.get("notas") || "");
     setSaving(true);
     try {
-      const { error } = await supabase.from("batteries").update({
-        status: "classified",
-        classificacao,
-        diagnostico: { soh, notas },
-      }).eq("id", battery.id);
-      if (error) throw error;
-      await supabase.from("battery_events").insert({
-        battery_id: battery.id, actor_id: userId, event_type: "classified",
-        notes: `Classificada como ${classificacao === "segunda_vida" ? "segunda vida" : "reciclagem"} (SoH ${soh}%). ${notas}`,
+      await workflowRpc("record_battery_diagnostic", {
+        _battery_id: battery.id,
+        _classification: classificacao,
+        _soh: soh,
+        _voltage: fd.get("tensao") ? Number(fd.get("tensao")) : null,
+        _capacity: fd.get("capacidade") ? Number(fd.get("capacidade")) : null,
+        _temperature: fd.get("temperatura") ? Number(fd.get("temperatura")) : null,
+        _integrity: String(fd.get("integridade") || "") || null,
+        _risk: String(fd.get("risco") || "") || null,
+        _recommendation: String(fd.get("recomendacao") || "") || null,
+        _notes: notas || null,
+        _organization_id: null,
       });
       toast.success("Bateria classificada");
       onSaved();
@@ -127,8 +278,21 @@ function TriageModal({ battery, userId, onClose, onSaved }: { battery: Battery; 
       <form onSubmit={submit} className="grid gap-3">
         <p className="text-xs text-slate-400">Origem: {battery.origem} · Química: {battery.quimica} · Estado: {battery.estado}</p>
         <div className="grid md:grid-cols-2 gap-3">
-          <Sel name="classificacao" label="Destinação" required options={[{value:"segunda_vida",label:"Segunda vida"},{value:"reciclagem",label:"Reciclagem"}]} />
+          <Sel name="classificacao" label="Classificação" required options={[
+            {value:"segunda_vida",label:"Segunda vida"},
+            {value:"reutilizacao_componentes",label:"Reutilização de componentes"},
+            {value:"reciclagem_mecanica",label:"Reciclagem mecânica"},
+            {value:"reciclagem_quimica",label:"Reciclagem química"},
+            {value:"quarentena_tecnica",label:"Quarentena técnica"},
+            {value:"descarte_controlado",label:"Descarte controlado"},
+          ]} />
           <Inp name="soh" label="State of Health (%)" type="number" min={0} max={100} required />
+          <Inp name="tensao" label="Tensão medida (V)" type="number" step="0.01" />
+          <Inp name="capacidade" label="Capacidade medida (kWh)" type="number" step="0.01" />
+          <Inp name="temperatura" label="Temperatura (°C)" type="number" step="0.1" />
+          <Inp name="integridade" label="Integridade estrutural" />
+          <Inp name="risco" label="Risco identificado" />
+          <Inp name="recomendacao" label="Recomendação de destino" />
         </div>
         <label className="grid gap-1">
           <span className="text-xs text-slate-400">Notas do diagnóstico</span>
@@ -196,6 +360,7 @@ function NewLotModal({ userId, onClose, onCreated }: { userId: string; onClose: 
         destino: String(fd.get("destino")) as "reciclagem" | "segunda_vida",
         cidade: String(fd.get("cidade") || "") || null,
         uf: String(fd.get("uf") || "") || null,
+        status: "rascunho",
       });
       if (error) throw error;
       toast.success("Lote criado");
@@ -231,69 +396,65 @@ function ManageLotModal({ lot, userId, onClose, onChanged }: { lot: Lot; userId:
   const [proposals, setProposals] = useState<Proposal[]>([]);
 
   const load = async () => {
-    const wantedClass = lot.destino;
     const [{ data: linked }, { data: props }] = await Promise.all([
       supabase.from("lot_batteries").select("battery_id").eq("lot_id", lot.id),
       supabase.from("proposals").select("*").eq("lot_id", lot.id).order("created_at", { ascending: false }),
     ]);
     const linkedIds = (linked ?? []).map((r) => r.battery_id);
-    const { data: bats } = await supabase.from("batteries").select("*").eq("classificacao", wantedClass);
-    setAssigned((bats ?? []).filter((b) => linkedIds.includes(b.id)));
-    setAvailable((bats ?? []).filter((b) => !linkedIds.includes(b.id) && b.status === "classified"));
+    const { data: bats } = await supabase.from("batteries").select("*");
+    const compatible = (bats ?? []).filter((b) =>
+      lot.destino === "segunda_vida"
+        ? b.classificacao === "segunda_vida"
+        : b.classificacao !== "segunda_vida" && b.classificacao !== null,
+    );
+    setAssigned(compatible.filter((b) => linkedIds.includes(b.id)));
+    setAvailable(compatible.filter((b) => !linkedIds.includes(b.id) && b.status === "classificada"));
     setProposals(props ?? []);
   };
   useEffect(() => { void load(); }, [lot.id]);
 
   const addBattery = async (b: Battery) => {
-    const { error } = await supabase.from("lot_batteries").insert({ lot_id: lot.id, battery_id: b.id });
-    if (error) return toast.error(error.message);
-    await supabase.from("batteries").update({ status: "in_lot" }).eq("id", b.id);
-    await supabase.from("battery_events").insert({ battery_id: b.id, actor_id: userId, event_type: "added_to_lot", notes: `Adicionada ao lote ${lot.code}` });
+    try {
+      await workflowRpc("add_battery_to_lot", {
+        _lot_id: lot.id,
+        _battery_id: b.id,
+        _organization_id: null,
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Erro ao adicionar");
+    }
     void load();
     onChanged();
   };
   const removeBattery = async (b: Battery) => {
-    await supabase.from("lot_batteries").delete().eq("lot_id", lot.id).eq("battery_id", b.id);
-    await supabase.from("batteries").update({ status: "classified" }).eq("id", b.id);
+    try {
+      await workflowRpc("remove_battery_from_lot", {
+        _lot_id: lot.id,
+        _battery_id: b.id,
+        _organization_id: null,
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Erro ao remover");
+    }
     void load();
     onChanged();
   };
   const publish = async () => {
-    await supabase.from("lots").update({ status: "published" }).eq("id", lot.id);
-    toast.success("Lote publicado para recicladores");
-    onChanged(); onClose();
-  };
-  const unpublish = async () => {
-    if (!window.confirm("Despublicar este lote? As propostas em aberto continuarão visíveis, mas o lote sai da vitrine.")) return;
-    const { error } = await supabase.from("lots").update({ status: "open" }).eq("id", lot.id).eq("status", "published");
-    if (error) return toast.error(error.message);
-    toast.success("Lote despublicado");
+    try {
+      await workflowRpc("publish_lot", { _lot_id: lot.id, _organization_id: null });
+      toast.success("Lote publicado para recicladoras habilitadas");
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Erro ao publicar");
+    }
     onChanged(); onClose();
   };
   const acceptProposal = async (p: Proposal) => {
-    // Concurrency guard: only accept if lot is still 'published'
-    const { data: locked, error: lockErr } = await supabase
-      .from("lots")
-      .update({ status: "awarded" })
-      .eq("id", lot.id)
-      .eq("status", "published")
-      .select("id")
-      .maybeSingle();
-    if (lockErr) return toast.error(lockErr.message);
-    if (!locked) {
-      toast.error("Este lote já foi arrematado ou não está mais publicado.");
-      onChanged(); void load();
-      return;
+    try {
+      await workflowRpc("accept_lot_proposal", { _proposal_id: p.id, _organization_id: null });
+      toast.success("Proposta aceita, operação e transporte criados");
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Erro ao aceitar proposta");
     }
-    await supabase.from("proposals").update({ status: "accepted" }).eq("id", p.id);
-    await supabase.from("proposals").update({ status: "rejected" }).eq("lot_id", lot.id).neq("id", p.id).eq("status", "submitted");
-    await supabase.from("collections").insert({
-      lot_id: lot.id,
-      origem_endereco: `${lot.cidade ?? ""}/${lot.uf ?? ""}`,
-      destino_endereco: "A definir com reciclador",
-      status: "available",
-    });
-    toast.success("Proposta aceita e coleta criada");
     onChanged(); void load();
   };
 
@@ -309,13 +470,13 @@ function ManageLotModal({ lot, userId, onClose, onChanged }: { lot: Lot; userId:
             {assigned.map((b) => (
               <li key={b.id} className="flex justify-between items-center px-3 py-2 bg-white/5 rounded">
                 <span><span className="font-mono text-brand">{b.code}</span> · {b.quimica} · {b.quantidade}x</span>
-                {lot.status === "open" && <button onClick={() => removeBattery(b)} className="text-danger text-xs">Remover</button>}
+                {["rascunho","em_formacao","pronto_para_publicacao"].includes(lot.status) && <button onClick={() => removeBattery(b)} className="text-danger text-xs">Remover</button>}
               </li>
             ))}
           </ul>
         </section>
 
-        {lot.status === "open" && (
+        {["rascunho","em_formacao"].includes(lot.status) && (
           <section>
             <h3 className="text-xs uppercase font-mono text-slate-400 mb-2">Disponíveis para adicionar ({available.length})</h3>
             <div className="max-h-52 overflow-y-auto grid gap-1">
@@ -333,14 +494,6 @@ function ManageLotModal({ lot, userId, onClose, onChanged }: { lot: Lot; userId:
           </section>
         )}
 
-        {lot.status === "published" && proposals.every((p) => p.status !== "accepted") && (
-          <div className="flex justify-end">
-            <button onClick={unpublish} className="px-3 py-1.5 border border-white/20 rounded text-xs hover:bg-white/5">
-              Despublicar e reabrir para edição
-            </button>
-          </div>
-        )}
-
         {proposals.length > 0 && (
           <section>
             <h3 className="text-xs uppercase font-mono text-slate-400 mb-2">Propostas recebidas ({proposals.length})</h3>
@@ -354,7 +507,7 @@ function ManageLotModal({ lot, userId, onClose, onChanged }: { lot: Lot; userId:
                     </div>
                     <StatusBadge status={p.status} />
                   </div>
-                  {p.status === "submitted" && lot.status !== "awarded" && (
+                  {p.status === "enviada" && !["proposta_aceita","contratado"].includes(lot.status) && (
                     <button onClick={() => acceptProposal(p)} className="mt-2 text-brand text-xs">Aceitar proposta</button>
                   )}
                 </li>
@@ -364,5 +517,71 @@ function ManageLotModal({ lot, userId, onClose, onChanged }: { lot: Lot; userId:
         )}
       </div>
     </Modal>
+  );
+}
+
+function OperationsTab() {
+  const [operations, setOperations] = useState<Operation[]>([]);
+  const [documentCounts, setDocumentCounts] = useState<Record<string, number>>({});
+
+  const load = async () => {
+    const [{ data: rows }, { data: docs }] = await Promise.all([
+      supabase.from("operations").select("*").order("created_at", { ascending: false }),
+      supabase.from("documents").select("operation_id").not("operation_id", "is", null),
+    ]);
+    setOperations(rows ?? []);
+    const counts: Record<string, number> = {};
+    (docs ?? []).forEach((d) => {
+      if (d.operation_id) counts[d.operation_id] = (counts[d.operation_id] ?? 0) + 1;
+    });
+    setDocumentCounts(counts);
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const complete = async (operation: Operation) => {
+    const notes = window.prompt("Observação da validação final:") ?? "Documentação validada";
+    try {
+      await workflowRpc("validate_and_complete_operation", {
+        _operation_id: operation.id,
+        _notes: notes,
+      });
+      toast.success("Documentação validada e operação concluída");
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao concluir operação");
+    }
+  };
+
+  return (
+    <div className="grid gap-3">
+      {operations.length === 0 && <p className="text-sm text-slate-500">Nenhuma operação criada.</p>}
+      {operations.map((operation) => (
+        <div key={operation.id} className="p-4 border border-white/10 rounded-md">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="font-mono text-xs text-brand">OP-{operation.id.slice(0, 8).toUpperCase()}</div>
+              <div className="text-sm text-slate-400 mt-1">Lote {operation.lot_id.slice(0, 8)}</div>
+              <div className="text-xs text-slate-500 mt-1">
+                {documentCounts[operation.id] ?? 0} documento(s) anexado(s)
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <StatusBadge status={operation.status} />
+              {operation.status === "documentacao_pendente" && (
+                <button
+                  onClick={() => void complete(operation)}
+                  className="px-3 py-1.5 bg-brand text-industrial rounded-md text-xs font-semibold"
+                >
+                  Validar e concluir
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
