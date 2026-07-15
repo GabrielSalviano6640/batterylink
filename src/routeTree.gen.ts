@@ -25,6 +25,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as RastreioTokenRouteImport } from './routes/rastreio.$token'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as AuthenticatedAppAdminRouteImport } from './routes/_authenticated/app.admin'
+import { Route as AuthenticatedAppTransportadoraIndexRouteImport } from './routes/_authenticated/app/transportadora/index'
+import { Route as AuthenticatedAppRecicladoraIndexRouteImport } from './routes/_authenticated/app/recicladora/index'
+import { Route as AuthenticatedAppOperadorIndexRouteImport } from './routes/_authenticated/app/operador/index'
+import { Route as AuthenticatedAppGeradorIndexRouteImport } from './routes/_authenticated/app/gerador/index'
+import { Route as AuthenticatedAppAdminPendingOrganizationsRouteImport } from './routes/_authenticated/app/admin/pending-organizations'
+import { Route as AuthenticatedAppGeradorBateriaNovaRouteImport } from './routes/_authenticated/app/gerador/bateria.nova'
+import { Route as AuthenticatedAppGeradorBateriaBatteryIdRouteImport } from './routes/_authenticated/app/gerador/bateria.$batteryId'
 
 const TransportadoraRoute = TransportadoraRouteImport.update({
   id: '/transportadora',
@@ -105,6 +112,48 @@ const AuthenticatedAppAdminRoute = AuthenticatedAppAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppTransportadoraIndexRoute =
+  AuthenticatedAppTransportadoraIndexRouteImport.update({
+    id: '/transportadora/',
+    path: '/transportadora/',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppRecicladoraIndexRoute =
+  AuthenticatedAppRecicladoraIndexRouteImport.update({
+    id: '/recicladora/',
+    path: '/recicladora/',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppOperadorIndexRoute =
+  AuthenticatedAppOperadorIndexRouteImport.update({
+    id: '/operador/',
+    path: '/operador/',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppGeradorIndexRoute =
+  AuthenticatedAppGeradorIndexRouteImport.update({
+    id: '/gerador/',
+    path: '/gerador/',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppAdminPendingOrganizationsRoute =
+  AuthenticatedAppAdminPendingOrganizationsRouteImport.update({
+    id: '/pending-organizations',
+    path: '/pending-organizations',
+    getParentRoute: () => AuthenticatedAppAdminRoute,
+  } as any)
+const AuthenticatedAppGeradorBateriaNovaRoute =
+  AuthenticatedAppGeradorBateriaNovaRouteImport.update({
+    id: '/gerador/bateria/nova',
+    path: '/gerador/bateria/nova',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppGeradorBateriaBatteryIdRoute =
+  AuthenticatedAppGeradorBateriaBatteryIdRouteImport.update({
+    id: '/gerador/bateria/$batteryId',
+    path: '/gerador/bateria/$batteryId',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -121,7 +170,14 @@ export interface FileRoutesByFullPath {
   '/transportadora': typeof TransportadoraRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/rastreio/$token': typeof RastreioTokenRoute
-  '/app/admin': typeof AuthenticatedAppAdminRoute
+  '/app/admin': typeof AuthenticatedAppAdminRouteWithChildren
+  '/app/admin/pending-organizations': typeof AuthenticatedAppAdminPendingOrganizationsRoute
+  '/app/gerador/': typeof AuthenticatedAppGeradorIndexRoute
+  '/app/operador/': typeof AuthenticatedAppOperadorIndexRoute
+  '/app/recicladora/': typeof AuthenticatedAppRecicladoraIndexRoute
+  '/app/transportadora/': typeof AuthenticatedAppTransportadoraIndexRoute
+  '/app/gerador/bateria/$batteryId': typeof AuthenticatedAppGeradorBateriaBatteryIdRoute
+  '/app/gerador/bateria/nova': typeof AuthenticatedAppGeradorBateriaNovaRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -138,7 +194,14 @@ export interface FileRoutesByTo {
   '/transportadora': typeof TransportadoraRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/rastreio/$token': typeof RastreioTokenRoute
-  '/app/admin': typeof AuthenticatedAppAdminRoute
+  '/app/admin': typeof AuthenticatedAppAdminRouteWithChildren
+  '/app/admin/pending-organizations': typeof AuthenticatedAppAdminPendingOrganizationsRoute
+  '/app/gerador': typeof AuthenticatedAppGeradorIndexRoute
+  '/app/operador': typeof AuthenticatedAppOperadorIndexRoute
+  '/app/recicladora': typeof AuthenticatedAppRecicladoraIndexRoute
+  '/app/transportadora': typeof AuthenticatedAppTransportadoraIndexRoute
+  '/app/gerador/bateria/$batteryId': typeof AuthenticatedAppGeradorBateriaBatteryIdRoute
+  '/app/gerador/bateria/nova': typeof AuthenticatedAppGeradorBateriaNovaRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -157,7 +220,14 @@ export interface FileRoutesById {
   '/transportadora': typeof TransportadoraRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/rastreio/$token': typeof RastreioTokenRoute
-  '/_authenticated/app/admin': typeof AuthenticatedAppAdminRoute
+  '/_authenticated/app/admin': typeof AuthenticatedAppAdminRouteWithChildren
+  '/_authenticated/app/admin/pending-organizations': typeof AuthenticatedAppAdminPendingOrganizationsRoute
+  '/_authenticated/app/gerador/': typeof AuthenticatedAppGeradorIndexRoute
+  '/_authenticated/app/operador/': typeof AuthenticatedAppOperadorIndexRoute
+  '/_authenticated/app/recicladora/': typeof AuthenticatedAppRecicladoraIndexRoute
+  '/_authenticated/app/transportadora/': typeof AuthenticatedAppTransportadoraIndexRoute
+  '/_authenticated/app/gerador/bateria/$batteryId': typeof AuthenticatedAppGeradorBateriaBatteryIdRoute
+  '/_authenticated/app/gerador/bateria/nova': typeof AuthenticatedAppGeradorBateriaNovaRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -177,6 +247,13 @@ export interface FileRouteTypes {
     | '/app'
     | '/rastreio/$token'
     | '/app/admin'
+    | '/app/admin/pending-organizations'
+    | '/app/gerador/'
+    | '/app/operador/'
+    | '/app/recicladora/'
+    | '/app/transportadora/'
+    | '/app/gerador/bateria/$batteryId'
+    | '/app/gerador/bateria/nova'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -194,6 +271,13 @@ export interface FileRouteTypes {
     | '/app'
     | '/rastreio/$token'
     | '/app/admin'
+    | '/app/admin/pending-organizations'
+    | '/app/gerador'
+    | '/app/operador'
+    | '/app/recicladora'
+    | '/app/transportadora'
+    | '/app/gerador/bateria/$batteryId'
+    | '/app/gerador/bateria/nova'
   id:
     | '__root__'
     | '/'
@@ -212,6 +296,13 @@ export interface FileRouteTypes {
     | '/_authenticated/app'
     | '/rastreio/$token'
     | '/_authenticated/app/admin'
+    | '/_authenticated/app/admin/pending-organizations'
+    | '/_authenticated/app/gerador/'
+    | '/_authenticated/app/operador/'
+    | '/_authenticated/app/recicladora/'
+    | '/_authenticated/app/transportadora/'
+    | '/_authenticated/app/gerador/bateria/$batteryId'
+    | '/_authenticated/app/gerador/bateria/nova'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -345,15 +436,93 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppAdminRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/transportadora/': {
+      id: '/_authenticated/app/transportadora/'
+      path: '/transportadora'
+      fullPath: '/app/transportadora/'
+      preLoaderRoute: typeof AuthenticatedAppTransportadoraIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/recicladora/': {
+      id: '/_authenticated/app/recicladora/'
+      path: '/recicladora'
+      fullPath: '/app/recicladora/'
+      preLoaderRoute: typeof AuthenticatedAppRecicladoraIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/operador/': {
+      id: '/_authenticated/app/operador/'
+      path: '/operador'
+      fullPath: '/app/operador/'
+      preLoaderRoute: typeof AuthenticatedAppOperadorIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/gerador/': {
+      id: '/_authenticated/app/gerador/'
+      path: '/gerador'
+      fullPath: '/app/gerador/'
+      preLoaderRoute: typeof AuthenticatedAppGeradorIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/admin/pending-organizations': {
+      id: '/_authenticated/app/admin/pending-organizations'
+      path: '/pending-organizations'
+      fullPath: '/app/admin/pending-organizations'
+      preLoaderRoute: typeof AuthenticatedAppAdminPendingOrganizationsRouteImport
+      parentRoute: typeof AuthenticatedAppAdminRoute
+    }
+    '/_authenticated/app/gerador/bateria/nova': {
+      id: '/_authenticated/app/gerador/bateria/nova'
+      path: '/gerador/bateria/nova'
+      fullPath: '/app/gerador/bateria/nova'
+      preLoaderRoute: typeof AuthenticatedAppGeradorBateriaNovaRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/gerador/bateria/$batteryId': {
+      id: '/_authenticated/app/gerador/bateria/$batteryId'
+      path: '/gerador/bateria/$batteryId'
+      fullPath: '/app/gerador/bateria/$batteryId'
+      preLoaderRoute: typeof AuthenticatedAppGeradorBateriaBatteryIdRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
   }
 }
 
+interface AuthenticatedAppAdminRouteChildren {
+  AuthenticatedAppAdminPendingOrganizationsRoute: typeof AuthenticatedAppAdminPendingOrganizationsRoute
+}
+
+const AuthenticatedAppAdminRouteChildren: AuthenticatedAppAdminRouteChildren = {
+  AuthenticatedAppAdminPendingOrganizationsRoute:
+    AuthenticatedAppAdminPendingOrganizationsRoute,
+}
+
+const AuthenticatedAppAdminRouteWithChildren =
+  AuthenticatedAppAdminRoute._addFileChildren(
+    AuthenticatedAppAdminRouteChildren,
+  )
+
 interface AuthenticatedAppRouteChildren {
-  AuthenticatedAppAdminRoute: typeof AuthenticatedAppAdminRoute
+  AuthenticatedAppAdminRoute: typeof AuthenticatedAppAdminRouteWithChildren
+  AuthenticatedAppGeradorIndexRoute: typeof AuthenticatedAppGeradorIndexRoute
+  AuthenticatedAppOperadorIndexRoute: typeof AuthenticatedAppOperadorIndexRoute
+  AuthenticatedAppRecicladoraIndexRoute: typeof AuthenticatedAppRecicladoraIndexRoute
+  AuthenticatedAppTransportadoraIndexRoute: typeof AuthenticatedAppTransportadoraIndexRoute
+  AuthenticatedAppGeradorBateriaBatteryIdRoute: typeof AuthenticatedAppGeradorBateriaBatteryIdRoute
+  AuthenticatedAppGeradorBateriaNovaRoute: typeof AuthenticatedAppGeradorBateriaNovaRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
-  AuthenticatedAppAdminRoute: AuthenticatedAppAdminRoute,
+  AuthenticatedAppAdminRoute: AuthenticatedAppAdminRouteWithChildren,
+  AuthenticatedAppGeradorIndexRoute: AuthenticatedAppGeradorIndexRoute,
+  AuthenticatedAppOperadorIndexRoute: AuthenticatedAppOperadorIndexRoute,
+  AuthenticatedAppRecicladoraIndexRoute: AuthenticatedAppRecicladoraIndexRoute,
+  AuthenticatedAppTransportadoraIndexRoute:
+    AuthenticatedAppTransportadoraIndexRoute,
+  AuthenticatedAppGeradorBateriaBatteryIdRoute:
+    AuthenticatedAppGeradorBateriaBatteryIdRoute,
+  AuthenticatedAppGeradorBateriaNovaRoute:
+    AuthenticatedAppGeradorBateriaNovaRoute,
 }
 
 const AuthenticatedAppRouteWithChildren =

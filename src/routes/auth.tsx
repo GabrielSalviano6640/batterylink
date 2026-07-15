@@ -5,8 +5,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
-import { maskPhone } from "@/lib/masks";
+import {
+  maskPhone,
+  maskCEP,
+  maskCPFOrCNPJ,
+  onlyDigits,
+  isValidCEP,
+  isValidCPFOrCNPJ,
+  isValidPhone,
+  isValidUF,
+  BRAZILIAN_UFS,
+} from "@/lib/masks";
 import { translateAuthError } from "@/lib/auth-errors";
+import type { AppRole } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -32,10 +43,55 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [cnpjCpf, setCnpjCpf] = useState("");
+  const [cargo, setCargo] = useState("");
+  const [organizationType, setOrganizationType] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [stateValue, setStateValue] = useState("");
+  const [cep, setCep] = useState("");
+  const [requestedRole, setRequestedRole] = useState<AppRole>("gerador");
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [acceptPriv, setAcceptPriv] = useState(false);
   const [acceptLgpd, setAcceptLgpd] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const roleOptions: { id: AppRole; label: string; desc: string }[] = [
+    {
+      id: "gerador",
+      label: "Gerador",
+      desc: "Cadastre baterias e solicite coleta de forma rastreada.",
+    },
+    {
+      id: "operador",
+      label: "Operador de triagem",
+      desc: "Registre diagnósticos, classificações e lotes.",
+    },
+    {
+      id: "transportadora",
+      label: "Transportadora",
+      desc: "Gerencie coletas e entregas em trânsito.",
+    },
+    {
+      id: "reciclador",
+      label: "Recicladora / segunda vida",
+      desc: "Envie propostas e registre destinações técnicas.",
+    },
+  ];
+
+  const organizationOptions = [
+    "Indústria / Montadora",
+    "Frota / Locadora",
+    "Distribuidora / Varejo",
+    "Cooperativa / Coletor",
+    "Operador de triagem",
+    "Recicladora",
+    "Segunda vida / Reuso",
+    "Transportadora especializada",
+    "Órgão público",
+    "Outro",
+  ];
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -53,37 +109,127 @@ function AuthPage() {
             "É necessário aceitar os Termos, a Política de Privacidade e o tratamento de dados.",
           );
         }
+        if (!fullName.trim()) {
+          throw new Error("Informe o nome completo.");
+        }
+        if (!isValidPhone(phone)) {
+          throw new Error("Informe um telefone válido com DDD.");
+        }
+        if (!companyName.trim()) {
+          throw new Error("Informe o nome da empresa.");
+        }
+        if (!isValidCPFOrCNPJ(cnpjCpf)) {
+          throw new Error("Informe um CPF ou CNPJ válido.");
+        }
+        if (!cargo.trim()) {
+          throw new Error("Informe seu cargo na empresa.");
+        }
+        if (!organizationType.trim()) {
+          throw new Error("Informe o tipo de organização.");
+        }
+        if (!address.trim()) {
+          throw new Error("Informe o endereço.");
+        }
+        if (!city.trim()) {
+          throw new Error("Informe a cidade.");
+        }
+        if (!isValidUF(stateValue)) {
+          throw new Error("Informe uma UF válida.");
+        }
+        if (!isValidCEP(cep)) {
+          throw new Error("Informe um CEP válido com oito dígitos.");
+        }
+
+        const cleanedCnpjCpf = onlyDigits(cnpjCpf);
+        const cleanedCep = onlyDigits(cep);
+        const now = new Date().toISOString();
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: window.location.origin + "/app",
-            data: { full_name: fullName },
+            emailRedirectTo: window.location.origin + "/auth?mode=signin",
+            data: {
+              full_name: fullName,
+              phone,
+              company_name: companyName,
+              cnpj_cpf: cleanedCnpjCpf,
+              requested_role: requestedRole,
+              tipo_organizacao: organizationType,
+              cargo,
+              endereco: address,
+              cidade: city,
+              estado: stateValue,
+              cep: cleanedCep,
+            },
           },
         });
+
         if (error) throw error;
 
         const uid = data.user?.id ?? data.session?.user?.id;
-        if (uid) {
-          const now = new Date().toISOString();
-          await supabase
-            .from("profiles")
-            .update({
-              phone,
-              full_name: fullName,
+        if (uid && data.session?.user) {
+          await supabase.from("profiles").upsert(
+            {
+              id: uid,
+              nome: fullName,
+              telefone: phone,
+              status: "pending",
               aceite_termos_at: now,
               aceite_privacidade_at: now,
               aceite_consentimento_at: now,
-            })
-            .eq("id", uid);
+              timezone: "America/Sao_Paulo",
+            },
+            { onConflict: "id" },
+          );
+
+          await supabase.from("companies").upsert(
+            {
+              owner_id: uid,
+              razao_social: companyName,
+              cnpj_cpf: cleanedCnpjCpf,
+              tipo_organizacao: organizationType,
+              email,
+              telefone: phone,
+              cep: cleanedCep,
+              endereco: address,
+              cidade,
+              estado: stateValue,
+              status: "aguardando_aprovacao",
+              status_aprovacao: "aguardando_aprovacao",
+              is_demo: false,
+            },
+            { onConflict: ["owner_id", "cnpj"] },
+          );
+
+          await supabase.from("registration_requests").insert(
+            {
+              user_id: uid,
+              requested_role: requestedRole,
+              company_data: {
+                razao_social: companyName,
+                cnpj_cpf: cleanedCnpjCpf,
+                tipo_organizacao: organizationType,
+                cargo,
+                endereco: address,
+                cidade,
+                estado: stateValue,
+                cep: cleanedCep,
+                telefone: phone,
+              },
+              status: "pending",
+              is_demo: false,
+            },
+            { returning: "minimal" },
+          );
         }
 
         if (data.session?.user) {
-          toast.success("Conta criada. Seja bem-vindo.");
+          toast.success("Conta criada. Acesso pendente de aprovação.");
           navigate({ to: "/app" });
         } else {
           toast.success(
-            "Conta criada. Verifique seu e-mail para ativar seu acesso antes de entrar.",
+            "Conta criada. Verifique seu e-mail para ativar o acesso antes de entrar.",
           );
           navigate({ to: "/auth", search: { mode: "signin" } });
         }
@@ -111,7 +257,7 @@ function AuthPage() {
     <div className="min-h-screen bg-industrial flex flex-col">
       <SiteNav />
       <main className="flex-1 flex items-center justify-center px-4 py-16">
-        <div className="w-full max-w-md bg-white/5 border border-white/10 rounded-lg p-8">
+        <div className="w-full max-w-2xl bg-white/5 border border-white/10 rounded-lg p-8">
           <p className="font-mono text-xs text-brand tracking-widest uppercase mb-2">
             {mode === "signin" ? "Entrar" : "Criar conta"}
           </p>
@@ -131,35 +277,162 @@ function AuthPage() {
             <div className="flex-1 h-px bg-white/10" />
           </div>
 
-          <form onSubmit={handleEmail} className="space-y-3">
+          <form onSubmit={handleEmail} className="space-y-4">
             {mode === "signup" && (
-              <>
-                <label htmlFor="auth-name" className="block text-xs text-slate-300">
-                  Nome completo
-                </label>
-                <input
-                  id="auth-name"
-                  required
-                  type="text"
-                  autoComplete="name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
-                />
-                <label htmlFor="auth-phone" className="block text-xs text-slate-300">
-                  Telefone
-                </label>
-                <input
-                  id="auth-phone"
-                  required
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(maskPhone(e.target.value))}
-                  className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
-                />
-              </>
+              <div className="grid gap-4">
+                <div>
+                  <label htmlFor="auth-name" className="block text-xs text-slate-300">
+                    Nome completo
+                  </label>
+                  <input
+                    id="auth-name"
+                    required
+                    type="text"
+                    autoComplete="name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="auth-phone" className="block text-xs text-slate-300">
+                    Telefone
+                  </label>
+                  <input
+                    id="auth-phone"
+                    required
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(maskPhone(e.target.value))}
+                    className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="auth-company" className="block text-xs text-slate-300">
+                    Nome da empresa
+                  </label>
+                  <input
+                    id="auth-company"
+                    required
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                  />
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <label className="block text-xs text-slate-300">
+                    CNPJ ou CPF
+                    <input
+                      id="auth-cnpj"
+                      required
+                      type="text"
+                      inputMode="numeric"
+                      value={cnpjCpf}
+                      onChange={(e) => setCnpjCpf(maskCPFOrCNPJ(e.target.value))}
+                      className="mt-2 w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                    />
+                  </label>
+                  <label className="block text-xs text-slate-300">
+                    Cargo
+                    <input
+                      id="auth-role"
+                      required
+                      type="text"
+                      value={cargo}
+                      onChange={(e) => setCargo(e.target.value)}
+                      className="mt-2 w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                    />
+                  </label>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <label className="block text-xs text-slate-300">
+                    Tipo de organização
+                    <select
+                      required
+                      value={organizationType}
+                      onChange={(e) => setOrganizationType(e.target.value)}
+                      className="mt-2 w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                    >
+                      <option value="">Selecione</option>
+                      {organizationOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs text-slate-300">
+                    Perfil solicitado
+                    <select
+                      required
+                      value={requestedRole}
+                      onChange={(e) => setRequestedRole(e.target.value as AppRole)}
+                      className="mt-2 w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                    >
+                      {roleOptions.map((role) => (
+                        <option key={role.id} value={role.id}>
+                          {role.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div>
+                  <label htmlFor="auth-address" className="block text-xs text-slate-300">
+                    Endereço
+                  </label>
+                  <input
+                    id="auth-address"
+                    required
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                  />
+                </div>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <label className="block text-xs text-slate-300">
+                    Cidade
+                    <input
+                      required
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      className="mt-2 w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                    />
+                  </label>
+                  <label className="block text-xs text-slate-300">
+                    Estado (UF)
+                    <select
+                      required
+                      value={stateValue}
+                      onChange={(e) => setStateValue(e.target.value)}
+                      className="mt-2 w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                    >
+                      <option value="">UF</option>
+                      {BRAZILIAN_UFS.map((uf) => (
+                        <option key={uf} value={uf}>
+                          {uf}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs text-slate-300">
+                    CEP
+                    <input
+                      required
+                      type="text"
+                      inputMode="numeric"
+                      value={cep}
+                      onChange={(e) => setCep(maskCEP(e.target.value))}
+                      className="mt-2 w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
+                    />
+                  </label>
+                </div>
+              </div>
             )}
             <label htmlFor="auth-email" className="block text-xs text-slate-300">
               E-mail corporativo

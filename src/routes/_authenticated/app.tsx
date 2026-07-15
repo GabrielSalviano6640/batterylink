@@ -211,7 +211,14 @@ function OnboardingForm({ onSubmitted }: { onSubmitted: () => Promise<void> }) {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Sessão expirada. Entre novamente.");
       const uid = user.user.id;
-      await supabase.from("profiles").update({ phone, cargo }).eq("id", uid);
+      await supabase.from("profiles").upsert(
+        {
+          id: uid,
+          phone,
+          cargo,
+        },
+        { onConflict: "id" },
+      );
       await supabase.from("companies").upsert(
         {
           owner_id: uid,
