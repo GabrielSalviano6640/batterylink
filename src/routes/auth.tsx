@@ -9,6 +9,9 @@ import { maskPhone } from "@/lib/masks";
 import { translateAuthError } from "@/lib/auth-errors";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    mode: search.mode === "signup" ? ("signup" as const) : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Entrar — BatteryLink Brasil" },
@@ -21,7 +24,10 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const search = Route.useSearch();
+  const [mode, setMode] = useState<"signin" | "signup">(
+    search.mode === "signup" ? "signup" : "signin",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -43,7 +49,9 @@ function AuthPage() {
     try {
       if (mode === "signup") {
         if (!acceptTerms || !acceptPriv || !acceptLgpd) {
-          throw new Error("É necessário aceitar os Termos, a Política de Privacidade e o tratamento de dados.");
+          throw new Error(
+            "É necessário aceitar os Termos, a Política de Privacidade e o tratamento de dados.",
+          );
         }
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -110,44 +118,62 @@ function AuthPage() {
           </button>
 
           <div className="flex items-center gap-3 my-4 text-xs text-slate-500">
-            <div className="flex-1 h-px bg-white/10" /> ou <div className="flex-1 h-px bg-white/10" />
+            <div className="flex-1 h-px bg-white/10" /> ou{" "}
+            <div className="flex-1 h-px bg-white/10" />
           </div>
 
           <form onSubmit={handleEmail} className="space-y-3">
             {mode === "signup" && (
               <>
+                <label htmlFor="auth-name" className="block text-xs text-slate-300">
+                  Nome completo
+                </label>
                 <input
+                  id="auth-name"
                   required
                   type="text"
-                  placeholder="Nome completo"
+                  autoComplete="name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
                 />
+                <label htmlFor="auth-phone" className="block text-xs text-slate-300">
+                  Telefone
+                </label>
                 <input
+                  id="auth-phone"
                   required
                   type="tel"
                   inputMode="tel"
-                  placeholder="Telefone"
+                  autoComplete="tel"
                   value={phone}
                   onChange={(e) => setPhone(maskPhone(e.target.value))}
                   className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
                 />
               </>
             )}
+            <label htmlFor="auth-email" className="block text-xs text-slate-300">
+              E-mail corporativo
+            </label>
             <input
+              id="auth-email"
               required
               type="email"
-              placeholder="E-mail corporativo"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
             />
+            <label htmlFor="auth-password" className="block text-xs text-slate-300">
+              Senha
+            </label>
             <input
+              id="auth-password"
               required
               type="password"
               minLength={8}
-              placeholder="Senha (mín. 8 caracteres)"
+              placeholder="Mínimo de 8 caracteres"
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 bg-industrial border border-white/10 rounded-md text-sm"
@@ -157,6 +183,7 @@ function AuthPage() {
               <div className="space-y-2 pt-2 text-xs text-slate-300">
                 <label className="flex gap-2 items-start cursor-pointer">
                   <input
+                    aria-label="Aceitar Termos de Uso"
                     type="checkbox"
                     checked={acceptTerms}
                     onChange={(e) => setAcceptTerms(e.target.checked)}
@@ -172,6 +199,7 @@ function AuthPage() {
                 </label>
                 <label className="flex gap-2 items-start cursor-pointer">
                   <input
+                    aria-label="Aceitar Política de Privacidade"
                     type="checkbox"
                     checked={acceptPriv}
                     onChange={(e) => setAcceptPriv(e.target.checked)}
@@ -187,12 +215,16 @@ function AuthPage() {
                 </label>
                 <label className="flex gap-2 items-start cursor-pointer">
                   <input
+                    aria-label="Autorizar tratamento de dados"
                     type="checkbox"
                     checked={acceptLgpd}
                     onChange={(e) => setAcceptLgpd(e.target.checked)}
                     className="mt-0.5 accent-brand"
                   />
-                  <span>Autorizo o tratamento dos meus dados conforme a LGPD para finalidades operacionais da plataforma.</span>
+                  <span>
+                    Autorizo o tratamento dos meus dados conforme a LGPD para finalidades
+                    operacionais da plataforma.
+                  </span>
                 </label>
               </div>
             )}

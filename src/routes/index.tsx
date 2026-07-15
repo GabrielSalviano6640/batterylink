@@ -11,6 +11,8 @@ import {
   Boxes,
   Factory,
   MapPin,
+  Building2,
+  LogIn,
 } from "lucide-react";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
@@ -76,8 +78,8 @@ const faqs = [
     a: "Ordens de coleta, MTR registrado ou anexado, laudos de diagnóstico, comprovantes de transporte e recebimento e CDF emitido ou validado pelo destinador responsável.",
   },
   {
-    q: "Como é garantida a segurança dos dados?",
-    a: "Controle de acesso por perfil (RBAC), criptografia de senhas, sessão segura, ocultação de dados comerciais sensíveis entre concorrentes e conformidade com a LGPD. Autenticação em dois fatores está preparada para ativação.",
+    q: "Como a plataforma protege os dados?",
+    a: "Controle de acesso validado no banco, sessão autenticada, documentos privados e isolamento de propostas concorrentes. A operação deve manter seus próprios controles e avaliações de conformidade com a LGPD.",
   },
   {
     q: "Os documentos têm validade legal automática?",
@@ -85,7 +87,7 @@ const faqs = [
   },
   {
     q: "Quais modelos comerciais existem?",
-    a: "Gerador paga pela destinação; reciclador compra o material; plataforma compra e revende; comissão sobre operação; taxa fixa por operação; assinatura mensal; ou modelo personalizado — configurável por operação.",
+    a: "Gerador paga pela destinação; recicladora compra o lote; ou modelo neutro de intermediação. A fase atual registra valores e situação financeira, sem processar pagamentos bancários.",
   },
 ];
 
@@ -140,6 +142,34 @@ function Index() {
               Conectamos geradores, operadores logísticos, centros de triagem, parceiros de segunda
               vida e recicladores em uma única plataforma segura e rastreável.
             </p>
+            <div className="mb-10 flex flex-wrap gap-3" aria-label="Ações principais">
+              <Link
+                to="/auth"
+                search={{ mode: "signup" }}
+                className="inline-flex items-center gap-2 rounded-lg bg-brand px-5 py-3 font-semibold text-industrial hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <BatteryCharging className="h-4 w-4" /> Cadastrar bateria
+              </Link>
+              <Link
+                to="/auth"
+                search={{ mode: "signup" }}
+                className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-5 py-3 font-semibold hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <Building2 className="h-4 w-4" /> Cadastrar empresa
+              </Link>
+              <Link
+                to="/auth"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-5 py-3 font-semibold hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <LogIn className="h-4 w-4" /> Entrar
+              </Link>
+              <Link
+                to="/contato"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-5 py-3 font-semibold hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <MessagesSquare className="h-4 w-4" /> Falar com a equipe
+              </Link>
+            </div>
           </div>
 
           {/* CTAs */}
@@ -232,7 +262,7 @@ function Index() {
         <div className="max-w-2xl mb-12">
           <span className="text-brand font-mono text-xs uppercase tracking-widest">Benefícios</span>
           <h2 className="text-3xl md:text-4xl font-display font-bold mt-2 italic">
-            Ambiental, econômico e regulatório — no mesmo painel.
+            Indicadores gerenciais, operação e documentação — no mesmo painel.
           </h2>
         </div>
         <div className="grid md:grid-cols-3 gap-4">
@@ -240,7 +270,7 @@ function Index() {
             {
               tag: "Ambiental",
               title: "Economia circular mensurável",
-              body: "Materiais recuperáveis estimados (Li, Co, Ni, Cu), emissões evitadas e índice de reaproveitamento por operação.",
+              body: "Estimativas calculadas somente quando há metodologia, fonte, versão e fatores técnicos configurados.",
             },
             {
               tag: "Econômico",
@@ -249,8 +279,8 @@ function Index() {
             },
             {
               tag: "Regulatório",
-              title: "Rastro auditável",
-              body: "Cadeia de custódia com carimbo de usuário, ação, data e status para atender IBAMA, CETESB e PNRS.",
+              title: "Apoio à rastreabilidade",
+              body: "Cadeia de custódia com usuário, ação, data e status. Documentos oficiais continuam sujeitos aos sistemas e responsáveis competentes.",
             },
           ].map((b) => (
             <div key={b.title} className="p-6 rounded-xl border border-white/5 bg-panel/50">
@@ -275,8 +305,8 @@ function Index() {
               LGPD, RBAC e histórico de auditoria protegido.
             </h2>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Cada usuário enxerga apenas o que sua função permite. Dados comerciais sensíveis nunca
-              circulam entre concorrentes. Toda ação técnica ou comercial deixa um histórico de
+              Cada usuário acessa os dados autorizados para sua função. As políticas do banco isolam
+              propostas concorrentes. Ações técnicas ou comerciais sensíveis deixam histórico de
               auditoria protegido contra alteração por usuários comuns.
             </p>
           </div>
@@ -303,15 +333,15 @@ function Index() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-14">
           <div>
             <span className="text-brand font-mono text-xs uppercase tracking-widest">
-              Standard Operating Procedure
+              Fluxo operacional proposto
             </span>
             <h2 className="text-3xl md:text-4xl font-display font-bold mt-2 italic">
-              Um fluxo, quatro papéis, zero perda de custódia.
+              Um fluxo para apoiar o controle da cadeia de custódia.
             </h2>
           </div>
           <p className="max-w-md text-slate-400 text-sm">
-            Cada bateria e cada lote têm linha do tempo auditável, do gerador até o certificado
-            final de destinação — com integração pronta para MTR e PNRS.
+            Cada bateria e lote pode ter linha do tempo do gerador à destinação. A emissão oficial
+            de MTR permanece no sistema ambiental competente.
           </p>
         </div>
 
@@ -337,9 +367,13 @@ function Index() {
         </div>
       </section>
 
-      {/* Preview do sistema interno */}
+      {/* Preview do sistema interno — conteúdo explicitamente ilustrativo */}
       <section className="max-w-7xl mx-auto px-6 pb-24">
         <div className="bg-panel/40 border border-white/10 rounded-3xl overflow-hidden">
+          <div className="border-b border-amber-300/20 bg-amber-300/10 px-6 py-3 text-sm text-amber-100">
+            <strong>Exemplo visual / simulação:</strong> os códigos, datas e números abaixo são
+            ilustrativos e não representam resultados reais.
+          </div>
           <div className="grid grid-cols-12">
             <div className="col-span-3 border-r border-white/5 p-6 space-y-3 hidden lg:block">
               <div className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest pb-4">
@@ -382,7 +416,7 @@ function Index() {
                 <div className="flex gap-6">
                   <div className="text-right">
                     <div className="text-brand font-display font-bold text-2xl tracking-tighter">
-                      84.2%
+                      Ex.: 84,2%
                     </div>
                     <div className="text-[10px] text-slate-500 uppercase font-mono tracking-widest">
                       SoH estimada
@@ -390,7 +424,7 @@ function Index() {
                   </div>
                   <div className="text-right">
                     <div className="text-white font-display font-bold text-2xl tracking-tighter">
-                      420 kWh
+                      Ex.: 420 kWh
                     </div>
                     <div className="text-[10px] text-slate-500 uppercase font-mono tracking-widest">
                       Capacidade
@@ -522,12 +556,12 @@ function Index() {
             {
               icon: LineChart,
               title: "Dashboard ambiental",
-              body: "Volume processado, materiais nobres recuperáveis, CO₂ evitado e relatórios por cliente.",
+              body: "Estimativas disponíveis somente com metodologia configurada e sujeitas à validação técnica.",
             },
             {
               icon: FileCheck2,
               title: "Financeiro flexível",
-              body: "Três modelos comerciais: gerador paga, plataforma compra ou modelo neutro (intermediação).",
+              body: "Três modelos comerciais: gerador paga, recicladora compra o lote ou intermediação neutra.",
             },
             {
               icon: ShieldCheck,
@@ -549,6 +583,46 @@ function Index() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      <section className="max-w-7xl mx-auto px-6 pb-24" aria-labelledby="destination-types">
+        <div className="max-w-3xl mb-8">
+          <span className="text-brand font-mono text-xs uppercase tracking-widest">
+            Classificações técnicas
+          </span>
+          <h2
+            id="destination-types"
+            className="text-3xl md:text-4xl font-display font-bold mt-2 italic"
+          >
+            Rotas de aproveitamento e destinação não são equivalentes.
+          </h2>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+          {[
+            ["Segunda vida", "Uso da bateria em nova aplicação após avaliação técnica."],
+            [
+              "Reutilização de componentes",
+              "Aproveitamento selecionado de módulos, células ou componentes.",
+            ],
+            [
+              "Reciclagem mecânica",
+              "Processamento físico para separação e preparação de materiais.",
+            ],
+            [
+              "Reciclagem química",
+              "Processamento para recuperação de materiais por rotas químicas.",
+            ],
+            [
+              "Destinação final",
+              "Tratamento ou descarte controlado quando o reaproveitamento não for tecnicamente aplicável.",
+            ],
+          ].map(([title, body]) => (
+            <article key={title} className="rounded-xl border border-white/10 bg-white/[0.025] p-5">
+              <h3 className="font-semibold text-brand">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{body}</p>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -589,10 +663,11 @@ function Index() {
             </p>
             <div className="flex flex-wrap gap-3">
               <Link
-                to="/gerador"
+                to="/auth"
+                search={{ mode: "signup" }}
                 className="px-6 py-3 bg-brand text-industrial rounded-lg font-semibold hover:brightness-110 transition-all inline-flex items-center gap-2"
               >
-                Registrar bateria <ArrowRight className="w-4 h-4" />
+                Cadastrar bateria <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
                 to="/contato"

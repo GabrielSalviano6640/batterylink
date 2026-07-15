@@ -138,6 +138,8 @@ export function GeradorDashboard({ userId }: { userId: string }) {
   const [chemistryFilter, setChemistryFilter] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [sort, setSort] = useState<"newest" | "oldest" | "code">("newest");
+  const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState<Battery | null>(null);
 
@@ -190,6 +192,19 @@ export function GeradorDashboard({ userId }: { userId: string }) {
       }),
     [items, q, statusFilter, chemistryFilter, from, to],
   );
+  const pageSize = 10;
+  const ordered = useMemo(
+    () =>
+      [...filtered].sort((a, b) => {
+        if (sort === "code") return a.code.localeCompare(b.code, "pt-BR");
+        const difference = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return sort === "oldest" ? difference : -difference;
+      }),
+    [filtered, sort],
+  );
+  const pageCount = Math.max(1, Math.ceil(ordered.length / pageSize));
+  const paginated = ordered.slice((page - 1) * pageSize, page * pageSize);
+  useEffect(() => setPage(1), [q, statusFilter, chemistryFilter, from, to, sort]);
 
   const indicators = useMemo(
     () => ({
@@ -319,7 +334,7 @@ export function GeradorDashboard({ userId }: { userId: string }) {
         <h2 className="font-display font-bold text-lg">Baterias</h2>
         <span className="text-xs text-slate-500">{filtered.length} resultado(s)</span>
       </div>
-      <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-2 mb-4">
+      <div className="grid md:grid-cols-2 lg:grid-cols-6 gap-2 mb-4">
         <label className="relative lg:col-span-2">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
           <input
@@ -369,6 +384,16 @@ export function GeradorDashboard({ userId }: { userId: string }) {
             className="min-w-0 px-2 py-2 bg-white/5 border border-white/10 rounded-md text-xs"
           />
         </div>
+        <select
+          aria-label="Ordenar baterias"
+          value={sort}
+          onChange={(e) => setSort(e.target.value as typeof sort)}
+          className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm"
+        >
+          <option value="newest">Mais recentes</option>
+          <option value="oldest">Mais antigas</option>
+          <option value="code">Código A–Z</option>
+        </select>
       </div>
 
       <div className="border border-white/10 rounded-md overflow-hidden">
@@ -397,11 +422,16 @@ export function GeradorDashboard({ userId }: { userId: string }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((b) => (
+              paginated.map((b) => (
                 <tr
                   key={b.id}
                   onClick={() => setDetail(b)}
-                  className="border-t border-white/5 hover:bg-white/5 cursor-pointer"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") setDetail(b);
+                  }}
+                  tabIndex={0}
+                  aria-label={`Abrir detalhes da bateria ${b.code}`}
+                  className="border-t border-white/5 hover:bg-white/5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
                 >
                   <td className="px-3 py-2 font-mono text-brand">{b.code}</td>
                   <td className="px-3 py-2">{b.origem}</td>
@@ -419,6 +449,32 @@ export function GeradorDashboard({ userId }: { userId: string }) {
           </tbody>
         </table>
       </div>
+      {ordered.length > 0 && (
+        <nav
+          aria-label="Paginação de baterias"
+          className="mt-3 flex items-center justify-between gap-3 text-sm"
+        >
+          <span className="text-slate-500">
+            Página {page} de {pageCount}
+          </span>
+          <div className="flex gap-2">
+            <button
+              disabled={page === 1}
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+              className="rounded-md border border-white/10 px-3 py-1.5 disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <button
+              disabled={page === pageCount}
+              onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+              className="rounded-md border border-white/10 px-3 py-1.5 disabled:opacity-40"
+            >
+              Próxima
+            </button>
+          </div>
+        </nav>
+      )}
 
       {showForm && (
         <NewBatteryModal

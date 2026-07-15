@@ -54,6 +54,8 @@ export type Database = {
           fabricante: string | null;
           id: string;
           modelo: string | null;
+          operator_organization_id: string | null;
+          is_demo: boolean;
           numero_serie: string | null;
           observacoes: string | null;
           origem: string;
@@ -88,6 +90,8 @@ export type Database = {
           fabricante?: string | null;
           id?: string;
           modelo?: string | null;
+          operator_organization_id?: string | null;
+          is_demo?: boolean;
           numero_serie?: string | null;
           observacoes?: string | null;
           origem: string;
@@ -122,6 +126,8 @@ export type Database = {
           fabricante?: string | null;
           id?: string;
           modelo?: string | null;
+          operator_organization_id?: string | null;
+          is_demo?: boolean;
           numero_serie?: string | null;
           observacoes?: string | null;
           origem?: string;
@@ -158,6 +164,7 @@ export type Database = {
           created_at: string;
           event_type: string;
           id: string;
+          is_demo: boolean;
           notes: string | null;
         };
         Insert: {
@@ -166,6 +173,7 @@ export type Database = {
           created_at?: string;
           event_type: string;
           id?: string;
+          is_demo?: boolean;
           notes?: string | null;
         };
         Update: {
@@ -174,6 +182,7 @@ export type Database = {
           created_at?: string;
           event_type?: string;
           id?: string;
+          is_demo?: boolean;
           notes?: string | null;
         };
         Relationships: [
@@ -358,17 +367,20 @@ export type Database = {
           cep: string | null;
           cidade: string | null;
           cnpj: string | null;
+          cnpj_cpf: string | null;
           complemento: string | null;
           created_at: string;
           email: string | null;
           endereco: string | null;
           estado: string | null;
           id: string;
+          is_demo: boolean;
           nome_fantasia: string | null;
           numero: string | null;
           owner_id: string;
           razao_social: string;
           status: Database["public"]["Enums"]["org_status"];
+          status_aprovacao: string | null;
           telefone: string | null;
           tipo: Database["public"]["Enums"]["app_role"];
           tipo_organizacao: string | null;
@@ -381,17 +393,20 @@ export type Database = {
           cep?: string | null;
           cidade?: string | null;
           cnpj?: string | null;
+          cnpj_cpf?: string | null;
           complemento?: string | null;
           created_at?: string;
           email?: string | null;
           endereco?: string | null;
           estado?: string | null;
           id?: string;
+          is_demo?: boolean;
           nome_fantasia?: string | null;
           numero?: string | null;
           owner_id: string;
           razao_social: string;
           status?: Database["public"]["Enums"]["org_status"];
+          status_aprovacao?: string | null;
           telefone?: string | null;
           tipo: Database["public"]["Enums"]["app_role"];
           tipo_organizacao?: string | null;
@@ -404,17 +419,20 @@ export type Database = {
           cep?: string | null;
           cidade?: string | null;
           cnpj?: string | null;
+          cnpj_cpf?: string | null;
           complemento?: string | null;
           created_at?: string;
           email?: string | null;
           endereco?: string | null;
           estado?: string | null;
           id?: string;
+          is_demo?: boolean;
           nome_fantasia?: string | null;
           numero?: string | null;
           owner_id?: string;
           razao_social?: string;
           status?: Database["public"]["Enums"]["org_status"];
+          status_aprovacao?: string | null;
           telefone?: string | null;
           tipo?: Database["public"]["Enums"]["app_role"];
           tipo_organizacao?: string | null;
@@ -1032,8 +1050,12 @@ export type Database = {
           email: string | null;
           full_name: string | null;
           id: string;
+          is_demo: boolean;
           phone: string | null;
           status: Database["public"]["Enums"]["request_status"];
+          suspended_at: string | null;
+          suspension_reason: string | null;
+          timezone: string;
           updated_at: string;
         };
         Insert: {
@@ -1046,8 +1068,12 @@ export type Database = {
           email?: string | null;
           full_name?: string | null;
           id: string;
+          is_demo?: boolean;
           phone?: string | null;
           status?: Database["public"]["Enums"]["request_status"];
+          suspended_at?: string | null;
+          suspension_reason?: string | null;
+          timezone?: string;
           updated_at?: string;
         };
         Update: {
@@ -1060,8 +1086,12 @@ export type Database = {
           email?: string | null;
           full_name?: string | null;
           id?: string;
+          is_demo?: boolean;
           phone?: string | null;
           status?: Database["public"]["Enums"]["request_status"];
+          suspended_at?: string | null;
+          suspension_reason?: string | null;
+          timezone?: string;
           updated_at?: string;
         };
         Relationships: [];
@@ -1299,18 +1329,21 @@ export type Database = {
         Row: {
           created_at: string;
           id: string;
+          is_demo: boolean;
           role: Database["public"]["Enums"]["app_role"];
           user_id: string;
         };
         Insert: {
           created_at?: string;
           id?: string;
+          is_demo?: boolean;
           role: Database["public"]["Enums"]["app_role"];
           user_id: string;
         };
         Update: {
           created_at?: string;
           id?: string;
+          is_demo?: boolean;
           role?: Database["public"]["Enums"]["app_role"];
           user_id?: string;
         };

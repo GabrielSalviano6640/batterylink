@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type AppRole = "admin" | "gerador" | "reciclador" | "transportadora" | "operador";
 
-export type ProfileStatus = "pending" | "approved" | "rejected";
+export type ProfileStatus = "pending" | "approved" | "rejected" | "suspended";
 
 export interface AuthState {
   loading: boolean;
@@ -15,6 +15,8 @@ export interface AuthState {
   roles: AppRole[];
   status: ProfileStatus | null;
   hasPendingRequest: boolean;
+  isDemo: boolean;
+  timeZone: string;
   refresh: () => Promise<void>;
 }
 
@@ -37,17 +39,30 @@ export function useAuth(): AuthState {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [status, setStatus] = useState<ProfileStatus | null>(null);
   const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
+  const [timeZone, setTimeZone] = useState("America/Sao_Paulo");
   const [loading, setLoading] = useState(true);
   const [impersonate, setImpersonate] = useState<AppRole | null>(getImpersonatedRole());
 
   const loadMeta = async (userId: string) => {
     const [{ data: roleRows }, { data: profile }, { data: req }] = await Promise.all([
       supabase.from("user_roles").select("role").eq("user_id", userId),
-      supabase.from("profiles").select("status").eq("id", userId).maybeSingle(),
-      supabase.from("registration_requests").select("id").eq("user_id", userId).eq("status", "pending").limit(1),
+      supabase
+        .from("profiles")
+        .select("status,suspended_at,is_demo,timezone")
+        .eq("id", userId)
+        .maybeSingle(),
+      supabase
+        .from("registration_requests")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("status", "pending")
+        .limit(1),
     ]);
     setRoles((roleRows ?? []).map((r) => r.role as AppRole));
-    setStatus((profile?.status as ProfileStatus) ?? null);
+    setStatus(profile?.suspended_at ? "suspended" : ((profile?.status as ProfileStatus) ?? null));
+    setIsDemo(Boolean(profile?.is_demo));
+    setTimeZone(profile?.timezone || "America/Sao_Paulo");
     setHasPendingRequest((req ?? []).length > 0);
   };
 
@@ -59,6 +74,8 @@ export function useAuth(): AuthState {
       setRoles([]);
       setStatus(null);
       setHasPendingRequest(false);
+      setIsDemo(false);
+      setTimeZone("America/Sao_Paulo");
     }
   };
 
@@ -75,6 +92,8 @@ export function useAuth(): AuthState {
         setRoles([]);
         setStatus(null);
         setHasPendingRequest(false);
+        setIsDemo(false);
+        setTimeZone("America/Sao_Paulo");
       }
     });
     const onImp = () => setImpersonate(getImpersonatedRole());
@@ -88,8 +107,20 @@ export function useAuth(): AuthState {
     };
   }, []);
 
-  const realRole: AppRole | null = roles.includes("admin") ? "admin" : roles[0] ?? null;
+  const realRole: AppRole | null = roles.includes("admin") ? "admin" : (roles[0] ?? null);
   const effective: AppRole | null = realRole === "admin" && impersonate ? impersonate : realRole;
 
-  return { loading, session, user: session?.user ?? null, role: effective, realRole, roles, status, hasPendingRequest, refresh };
+  return {
+    loading,
+    session,
+    user: session?.user ?? null,
+    role: effective,
+    realRole,
+    roles,
+    status,
+    hasPendingRequest,
+    isDemo,
+    timeZone,
+    refresh,
+  };
 }

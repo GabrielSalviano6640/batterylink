@@ -38,9 +38,9 @@ function ContatoPage() {
           protocol={submitted}
           title="Obrigado pelo contato."
           nextSteps={[
-            "Um consultor vai responder por e-mail em até 1 dia útil.",
-            "Se for urgente, ligue no (11) 4000-0000 em horário comercial.",
-            "Para propostas institucionais, prepararemos uma reunião com o time técnico e comercial.",
+            "A solicitação foi registrada com o protocolo exibido acima.",
+            "A equipe responderá pelos dados de contato informados, conforme disponibilidade.",
+            "O envio de e-mail depende da integração de e-mail estar configurada.",
           ]}
         />
       </FormShell>
@@ -79,7 +79,13 @@ function ContatoPage() {
             <input name="email" type="email" required className={inputCls} />
           </Field>
           <Field label="Telefone">
-            <input name="phone" className={inputCls} placeholder="(11) 90000-0000" inputMode="tel" onInput={maskInput(maskPhone)} />
+            <input
+              name="phone"
+              className={inputCls}
+              placeholder="(11) 90000-0000"
+              inputMode="tel"
+              onInput={maskInput(maskPhone)}
+            />
           </Field>
           <Field label="Assunto" required>
             <select name="assunto" required className={selectCls}>
@@ -103,7 +109,12 @@ function ContatoPage() {
           </Field>
         </div>
         <Field label="Como podemos ajudar?" required>
-          <textarea name="mensagem" required className={textareaCls} placeholder="Descreva sua necessidade" />
+          <textarea
+            name="mensagem"
+            required
+            className={textareaCls}
+            placeholder="Descreva sua necessidade"
+          />
         </Field>
 
         <div className="flex flex-wrap gap-3 items-center pt-4 border-t border-white/5">

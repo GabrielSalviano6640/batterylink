@@ -117,7 +117,7 @@ export function TransportadoraDashboard({ userId }: { userId: string }) {
   };
 
   const cards = [
-    ["Ordens disponíveis", summary.available_orders + summary.assigned_orders, ClipboardList],
+    ["Ordens atribuídas", summary.assigned_orders, ClipboardList],
     ["Coletas pendentes", summary.pending_collections, AlertTriangle],
     ["Coletas aceitas", summary.accepted_collections, CheckCircle2],
     ["Agenda", summary.scheduled_collections, CalendarClock],
@@ -127,7 +127,7 @@ export function TransportadoraDashboard({ userId }: { userId: string }) {
     ["Ocorrências", summary.open_incidents, Siren],
   ] as const;
   const tabLabels: Record<Tab, string> = {
-    available: "Ordens",
+    available: "Ordens atribuídas",
     pending: "Pendentes",
     agenda: "Agenda",
     transit: "Em andamento",

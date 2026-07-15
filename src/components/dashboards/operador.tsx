@@ -33,6 +33,16 @@ type CarrierOption = {
   state: string | null;
   documents_ok: boolean;
 };
+type IntakeQueueItem = {
+  id: string;
+  code: string;
+  chemistry: string | null;
+  urgency: string | null;
+  city: string | null;
+  state: string | null;
+  created_at: string;
+  risk: boolean;
+};
 
 type OperatorSummary = {
   received_requests: number;
@@ -153,16 +163,22 @@ function BatteriesTab() {
   const [triage, setTriage] = useState<Battery | null>(null);
   const [collectBattery, setCollectBattery] = useState<Battery | null>(null);
   const [carriers, setCarriers] = useState<CarrierOption[]>([]);
+  const [intakeQueue, setIntakeQueue] = useState<IntakeQueueItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    const [{ data }, { data: collectionRows }, carrierRows] = await Promise.all([
+    setLoading(true);
+    const [{ data }, { data: collectionRows }, carrierRows, queueRows] = await Promise.all([
       supabase.from("batteries").select("*").order("created_at", { ascending: false }),
       supabase.from("collections").select("*").order("created_at", { ascending: false }),
       workflowRpc<CarrierOption[]>("list_eligible_carriers", {}).catch(() => []),
+      workflowRpc<IntakeQueueItem[]>("list_operator_intake_queue", {}).catch(() => []),
     ]);
     setItems(data ?? []);
     setCollections(collectionRows ?? []);
     setCarriers(carrierRows ?? []);
+    setIntakeQueue(queueRows ?? []);
+    setLoading(false);
   };
   useEffect(() => {
     void load();
@@ -205,8 +221,64 @@ function BatteriesTab() {
     }
   };
 
+  const claim = async (item: IntakeQueueItem) => {
+    if (!window.confirm(`Assumir a responsabilidade técnica pela bateria ${item.code}?`)) return;
+    try {
+      await workflowRpc("claim_operator_battery", { _battery_id: item.id, _organization_id: null });
+      toast.success("Solicitação atribuída à sua organização");
+      await load();
+      refreshOperatorSummary();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não foi possível assumir a solicitação");
+    }
+  };
+
   return (
     <div>
+      <section
+        className="mb-4 rounded-md border border-brand/20 bg-brand/5 p-4"
+        aria-labelledby="operator-intake-title"
+      >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 id="operator-intake-title" className="font-semibold">
+              Fila de entrada sanitizada
+            </h2>
+            <p className="text-xs text-slate-400">
+              Dados pessoais e endereços completos só ficam disponíveis após a atribuição.
+            </p>
+          </div>
+          <span className="rounded-full bg-brand/10 px-2 py-1 text-xs text-brand">
+            {intakeQueue.length} disponível(is)
+          </span>
+        </div>
+        {intakeQueue.length === 0 ? (
+          <p className="text-sm text-slate-500">Nenhuma solicitação aguardando atribuição.</p>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {intakeQueue.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-md border border-white/10 p-3"
+              >
+                <div className="min-w-0 text-sm">
+                  <div className="font-mono text-brand">{item.code}</div>
+                  <div className="truncate text-xs text-slate-400">
+                    {item.chemistry || "Química não informada"} ·{" "}
+                    {item.city || "Cidade não informada"}/{item.state || "—"}
+                  </div>
+                </div>
+                <button
+                  onClick={() => void claim(item)}
+                  className="rounded-md border border-brand/40 px-3 py-1.5 text-xs text-brand hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                  Assumir
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       <div className="flex flex-wrap gap-2 mb-3">
         <input
           placeholder="Buscar código..."
@@ -241,7 +313,13 @@ function BatteriesTab() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
+                  Carregando baterias autorizadas...
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
                   Nenhuma bateria.
