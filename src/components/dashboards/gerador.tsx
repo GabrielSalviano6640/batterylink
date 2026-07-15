@@ -1,17 +1,115 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
-import { BatteryCharging, Plus, X, QrCode, FileDown } from "lucide-react";
+import {
+  ArrowLeft,
+  BatteryCharging,
+  CalendarClock,
+  CheckCircle2,
+  FileDown,
+  FileText,
+  FileWarning,
+  ImageIcon,
+  Leaf,
+  Microscope,
+  Paperclip,
+  Plus,
+  QrCode,
+  Scale,
+  Search,
+  ShieldCheck,
+  Truck,
+  Upload,
+  X,
+  Zap,
+} from "lucide-react";
 import { generateCertificate } from "@/lib/certificate";
-import { batteryStatusLabels, transitionBattery, workflowLabel } from "@/lib/workflow";
+import { batteryStatusLabels, transitionBattery, workflowLabel, workflowRpc } from "@/lib/workflow";
 
 type Battery = Tables<"batteries">;
+type BatteryFile = Tables<"battery_files">;
+
+type GeneratorSummary = {
+  total_batteries: number;
+  open_requests: number;
+  scheduled_collections: number;
+  in_triage: number;
+  completed_operations: number;
+  pending_documents: number;
+  estimated_mass_kg: number;
+  estimated_capacity_kwh: number;
+};
+
+type GeneratorContext = {
+  collections: Array<{
+    id: string;
+    code: string | null;
+    kind: "triagem" | "destinacao";
+    status: string;
+    requested_at: string | null;
+    scheduled_at: string | null;
+    collected_at: string | null;
+    delivered_at: string | null;
+    origin: string | null;
+    destination: string | null;
+    vehicle: string | null;
+    plate: string | null;
+    driver: string | null;
+  }>;
+  diagnostic: null | {
+    date: string;
+    voltage: number | null;
+    capacity_kwh: number | null;
+    soh: number | null;
+    temperature: number | null;
+    structural_integrity: string | null;
+    risk: string | null;
+    classification: string;
+    recommendation: string | null;
+    notes: string | null;
+    validation_status: string;
+  };
+  destination: null | {
+    lot_code: string;
+    lot_status: string;
+    destination_type: string;
+    city: string | null;
+    state: string | null;
+    operation_status: string | null;
+    defined_at: string | null;
+  };
+  documents: Array<{
+    id: string;
+    type: string;
+    number: string | null;
+    status: string | null;
+    issued_at: string | null;
+    valid_until: string | null;
+    validated_at: string | null;
+    created_at: string;
+    storage_path: string | null;
+  }>;
+  privacy: { commercial_data_hidden: boolean; message: string };
+};
+
+const openRequestStatuses = new Set([
+  "cadastrada",
+  "aguardando_analise",
+  "informacoes_solicitadas",
+  "aprovada_para_coleta",
+]);
+const triageStatuses = new Set(["recebida_na_triagem", "em_diagnostico"]);
 
 export function GeradorDashboard({ userId }: { userId: string }) {
   const [items, setItems] = useState<Battery[]>([]);
+  const [summary, setSummary] = useState<GeneratorSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [chemistryFilter, setChemistryFilter] = useState("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState<Battery | null>(null);
 
@@ -23,6 +121,11 @@ export function GeradorDashboard({ userId }: { userId: string }) {
       .eq("owner_id", userId)
       .order("created_at", { ascending: false });
     setItems(data ?? []);
+    try {
+      setSummary(await workflowRpc<GeneratorSummary>("get_generator_dashboard_summary", {}));
+    } catch {
+      setSummary(null);
+    }
     setLoading(false);
   };
 
@@ -30,13 +133,54 @@ export function GeradorDashboard({ userId }: { userId: string }) {
     void load();
   }, [userId]);
 
-  const filtered = items.filter(
-    (b) =>
-      !q ||
-      b.code.toLowerCase().includes(q.toLowerCase()) ||
-      (b.fabricante ?? "").toLowerCase().includes(q.toLowerCase()) ||
-      (b.modelo ?? "").toLowerCase().includes(q.toLowerCase())
+  const chemistries = useMemo(
+    () => Array.from(new Set(items.map((b) => b.quimica))).sort(),
+    [items],
   );
+  const statuses = useMemo(
+    () => Array.from(new Set(items.map((b) => b.status))),
+    [items],
+  );
+  const filtered = useMemo(() => items.filter((b) => {
+    const term = q.trim().toLowerCase();
+    const created = new Date(b.created_at);
+    return (
+      (!term || b.code.toLowerCase().includes(term))
+      && (statusFilter === "all" || b.status === statusFilter)
+      && (chemistryFilter === "all" || b.quimica === chemistryFilter)
+      && (!from || created >= new Date(`${from}T00:00:00`))
+      && (!to || created <= new Date(`${to}T23:59:59`))
+    );
+  }), [items, q, statusFilter, chemistryFilter, from, to]);
+
+  const indicators = useMemo(() => ({
+    total: summary?.total_batteries ?? items.length,
+    open: summary?.open_requests ?? items.filter((b) => openRequestStatuses.has(b.status)).length,
+    scheduled: summary?.scheduled_collections ?? items.filter((b) => b.status === "coleta_agendada").length,
+    triage: summary?.in_triage ?? items.filter((b) => triageStatuses.has(b.status)).length,
+    completed: summary?.completed_operations ?? items.filter((b) => b.status === "concluida").length,
+    pendingDocuments: summary?.pending_documents ?? items.filter((b) => b.status === "documentacao_pendente").length,
+  }), [items, summary]);
+
+  const environmental = useMemo(() => {
+    const completed = items.filter((b) => b.status === "concluida");
+    const massKg = summary?.estimated_mass_kg
+      ?? completed.reduce((sum, b) => sum + (Number(b.peso_kg) || 0) * b.quantidade, 0);
+    const capacityKwh = summary?.estimated_capacity_kwh
+      ?? completed.reduce((sum, b) => sum + (Number(b.capacidade_kwh) || 0) * b.quantidade, 0);
+    return { massKg, capacityKwh, co2Kg: massKg * 2.5 };
+  }, [items, summary]);
+
+  if (detail) {
+    return (
+      <BatteryDetailPage
+        battery={detail}
+        userId={userId}
+        onBack={() => setDetail(null)}
+        onChanged={() => void load()}
+      />
+    );
+  }
 
   return (
     <div>
@@ -46,7 +190,7 @@ export function GeradorDashboard({ userId }: { userId: string }) {
             <BatteryCharging className="w-5 h-5 text-brand" />
             <p className="font-mono text-xs text-brand tracking-widest uppercase">Painel · Gerador</p>
           </div>
-          <h1 className="text-2xl font-display font-bold">Minhas baterias</h1>
+          <h1 className="text-2xl font-display font-bold">Visão geral</h1>
         </div>
         <button
           onClick={() => setShowForm(true)}
@@ -56,12 +200,56 @@ export function GeradorDashboard({ userId }: { userId: string }) {
         </button>
       </div>
 
-      <input
-        placeholder="Buscar por código, fabricante ou modelo..."
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        className="w-full mb-4 px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm"
-      />
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+        <KpiCard label="Baterias cadastradas" value={indicators.total} icon={<BatteryCharging className="w-4 h-4" />} />
+        <KpiCard label="Solicitações abertas" value={indicators.open} icon={<FileWarning className="w-4 h-4" />} />
+        <KpiCard label="Coletas agendadas" value={indicators.scheduled} icon={<CalendarClock className="w-4 h-4" />} />
+        <KpiCard label="Em triagem" value={indicators.triage} icon={<Microscope className="w-4 h-4" />} />
+        <KpiCard label="Operações concluídas" value={indicators.completed} icon={<CheckCircle2 className="w-4 h-4" />} accent />
+        <KpiCard label="Documentos pendentes" value={indicators.pendingDocuments} icon={<FileText className="w-4 h-4" />} />
+      </div>
+
+      <section className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Leaf className="w-4 h-4 text-brand" />
+          <h2 className="text-sm font-semibold">Indicadores ambientais</h2>
+          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300">Estimativas</span>
+        </div>
+        <div className="grid md:grid-cols-3 gap-3">
+          <EstimateCard label="Massa destinada" value={`${environmental.massKg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg`} icon={<Scale className="w-4 h-4" />} />
+          <EstimateCard label="Capacidade encaminhada" value={`${environmental.capacityKwh.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kWh`} icon={<Zap className="w-4 h-4" />} />
+          <EstimateCard label="CO₂ potencialmente evitado" value={`${environmental.co2Kg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg CO₂e`} icon={<Leaf className="w-4 h-4" />} />
+        </div>
+        <p className="text-[10px] text-slate-500 mt-2">Estimativas informativas baseadas nos dados cadastrados e em fator indicativo de 2,5 kg CO₂e por kg destinado. Não substituem inventário ou laudo ambiental.</p>
+      </section>
+
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h2 className="font-display font-bold text-lg">Baterias</h2>
+        <span className="text-xs text-slate-500">{filtered.length} resultado(s)</span>
+      </div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-2 mb-4">
+        <label className="relative lg:col-span-2">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+          <input
+            placeholder="Filtrar pelo código..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm"
+          />
+        </label>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm">
+          <option value="all">Todos os status</option>
+          {statuses.map((status) => <option key={status} value={status}>{workflowLabel(status)}</option>)}
+        </select>
+        <select value={chemistryFilter} onChange={(e) => setChemistryFilter(e.target.value)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm">
+          <option value="all">Todas as químicas</option>
+          {chemistries.map((chemistry) => <option key={chemistry} value={chemistry}>{chemistry}</option>)}
+        </select>
+        <div className="grid grid-cols-2 gap-2">
+          <input aria-label="Período inicial" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="min-w-0 px-2 py-2 bg-white/5 border border-white/10 rounded-md text-xs" />
+          <input aria-label="Período final" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="min-w-0 px-2 py-2 bg-white/5 border border-white/10 rounded-md text-xs" />
+        </div>
+      </div>
 
       <div className="border border-white/10 rounded-md overflow-hidden">
         <table className="w-full text-sm">
@@ -95,16 +283,24 @@ export function GeradorDashboard({ userId }: { userId: string }) {
       </div>
 
       {showForm && <NewBatteryModal userId={userId} onClose={() => setShowForm(false)} onCreated={() => { void load(); setShowForm(false); }} />}
-      {detail && (
-        <BatteryDetailModal
-          battery={detail}
-          onClose={() => setDetail(null)}
-          onChanged={() => {
-            void load();
-            setDetail(null);
-          }}
-        />
-      )}
+    </div>
+  );
+}
+
+function KpiCard({ label, value, icon, accent }: { label: string; value: number; icon: React.ReactNode; accent?: boolean }) {
+  return (
+    <div className="p-3 rounded-md bg-white/5 border border-white/10">
+      <div className={`flex items-center gap-1.5 text-[10px] uppercase font-mono mb-2 ${accent ? "text-brand" : "text-slate-500"}`}>{icon}{label}</div>
+      <div className={`text-2xl font-display font-bold ${accent ? "text-brand" : ""}`}>{value}</div>
+    </div>
+  );
+}
+
+function EstimateCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+  return (
+    <div className="p-3 rounded-md border border-brand/15 bg-brand/5">
+      <div className="flex items-center gap-1.5 text-xs text-brand mb-1">{icon}{label}</div>
+      <div className="font-display font-bold text-lg">{value}</div>
     </div>
   );
 }
@@ -222,11 +418,51 @@ function NewBatteryModal({ userId, onClose, onCreated }: { userId: string; onClo
 }
 
 type EventRow = Tables<"battery_events">;
+type DisplayFile = BatteryFile & { signedUrl?: string };
 
-function BatteryDetailModal({ battery, onClose, onChanged }: { battery: Battery; onClose: () => void; onChanged: () => void }) {
+function BatteryDetailPage({
+  battery,
+  userId,
+  onBack,
+  onChanged,
+}: {
+  battery: Battery;
+  userId: string;
+  onBack: () => void;
+  onChanged: () => void;
+}) {
   const [events, setEvents] = useState<EventRow[]>([]);
+  const [files, setFiles] = useState<DisplayFile[]>([]);
+  const [context, setContext] = useState<GeneratorContext | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+
+  const loadDetail = async () => {
+    setLoading(true);
+    try {
+      const [{ data: eventRows }, { data: fileRows }, detailContext] = await Promise.all([
+        supabase.from("battery_events").select("*").eq("battery_id", battery.id).order("created_at", { ascending: true }),
+        supabase.from("battery_files").select("*").eq("battery_id", battery.id).order("created_at", { ascending: false }),
+        workflowRpc<GeneratorContext>("get_generator_battery_context", { _battery_id: battery.id }),
+      ]);
+      const rows = fileRows ?? [];
+      const withUrls = await Promise.all(rows.map(async (file) => {
+        if (!file.tipo.startsWith("foto")) return file;
+        const { data } = await supabase.storage.from("battery-files").createSignedUrl(file.storage_path, 3600);
+        return { ...file, signedUrl: data?.signedUrl };
+      }));
+      setEvents(eventRows ?? []);
+      setFiles(withUrls);
+      setContext(detailContext);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao carregar detalhes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    void supabase.from("battery_events").select("*").eq("battery_id", battery.id).order("created_at", { ascending: true }).then(({ data }) => setEvents(data ?? []));
+    void loadDetail();
   }, [battery.id]);
 
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(battery.qr_code_data ?? battery.code)}`;
@@ -237,65 +473,219 @@ function BatteryDetailModal({ battery, onClose, onChanged }: { battery: Battery;
       await transitionBattery(battery.id, "aguardando_analise", note);
       toast.success("Bateria reenviada para análise");
       onChanged();
+      onBack();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao reenviar");
     }
   };
 
+  const uploadFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+      const path = `${userId}/${battery.id}/${crypto.randomUUID()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage.from("battery-files").upload(path, file, { upsert: false });
+      if (uploadError) throw uploadError;
+      const { error: metadataError } = await supabase.from("battery_files").insert({
+        battery_id: battery.id,
+        tipo: file.type.startsWith("image/") ? "foto" : "arquivo",
+        nome_arquivo: file.name,
+        storage_path: path,
+        uploaded_by: userId,
+      });
+      if (metadataError) throw metadataError;
+      toast.success("Arquivo anexado");
+      await loadDetail();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao anexar arquivo");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const openPrivateFile = async (bucket: string, path: string | null) => {
+    if (!path) return;
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 300);
+    if (error || !data?.signedUrl) return toast.error(error?.message ?? "Arquivo indisponível");
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const diagnostic = context?.diagnostic;
+  const destination = context?.destination;
+  const collections = context?.collections ?? [];
+  const documents = context?.documents ?? [];
+
   return (
-    <Modal onClose={onClose} title={battery.code}>
-      <div className="grid md:grid-cols-[180px_1fr] gap-6 text-sm">
-        <div className="flex flex-col items-center gap-2">
-          <img src={qrUrl} alt={`QR ${battery.code}`} className="rounded bg-white p-2" width={180} height={180} />
-          <span className="text-xs text-slate-400 inline-flex items-center gap-1"><QrCode className="w-3 h-3" /> Rastreio</span>
+    <div>
+      <button onClick={onBack} className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white mb-4">
+        <ArrowLeft className="w-4 h-4" /> Voltar para o painel
+      </button>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+        <div>
+          <p className="font-mono text-xs text-brand tracking-widest uppercase">Detalhes da bateria</p>
+          <h1 className="text-2xl font-display font-bold mt-1">{battery.code}</h1>
         </div>
-        <div className="grid gap-2">
-          <Row k="Status"><StatusBadge status={battery.status} /></Row>
-          <Row k="Origem">{battery.origem}</Row>
-          <Row k="Química">{battery.quimica}</Row>
-          <Row k="Fabricante/Modelo">{[battery.fabricante, battery.modelo].filter(Boolean).join(" / ") || "—"}</Row>
-          <Row k="Capacidade">{battery.capacidade_kwh ? `${battery.capacidade_kwh} kWh` : "—"}</Row>
-          <Row k="Quantidade">{battery.quantidade}</Row>
-          <Row k="Peso">{battery.peso_kg ? `${battery.peso_kg} kg` : "—"}</Row>
-          <Row k="Estado">{battery.estado}</Row>
-          <Row k="Urgência">{battery.urgencia}</Row>
-          <Row k="Local">{[battery.cidade, battery.uf].filter(Boolean).join("/") || "—"}</Row>
-          {battery.classificacao && <Row k="Classificação">{battery.classificacao.replaceAll("_", " ")}</Row>}
-          {battery.observacoes && <Row k="Observações">{battery.observacoes}</Row>}
-          {battery.status === "informacoes_solicitadas" && (
-            <button
-              onClick={() => void resubmit()}
-              className="mt-3 inline-flex items-center gap-1.5 self-start px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold"
-            >
-              Reenviar informações para análise
-            </button>
-          )}
-          {battery.status === "concluida" && (
-            <button
-              onClick={() => void generateCertificate(battery)}
-              className="mt-3 inline-flex items-center gap-1.5 self-start px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold hover:brightness-110"
-            >
-              <FileDown className="w-3.5 h-3.5" /> Baixar certificado (PDF)
-            </button>
-          )}
-        </div>
+        <StatusBadge status={battery.status} />
       </div>
 
-      <div className="mt-6">
-        <h3 className="text-xs uppercase font-mono text-slate-400 mb-2">Linha do tempo</h3>
+      <div className="grid lg:grid-cols-[220px_1fr] gap-4 mb-4">
+        <section className="p-4 border border-white/10 rounded-md bg-white/5 flex flex-col items-center gap-2">
+          <img src={qrUrl} alt={`QR ${battery.code}`} className="rounded bg-white p-2" width={180} height={180} />
+          <span className="text-xs text-slate-400 inline-flex items-center gap-1"><QrCode className="w-3 h-3" /> Rastreio individual</span>
+        </section>
+        <section className="p-4 border border-white/10 rounded-md bg-white/5">
+          <h2 className="text-xs uppercase font-mono text-slate-400 mb-3">Dados cadastrados</h2>
+          <div className="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <Row k="Origem">{battery.origem}</Row>
+            <Row k="Química">{battery.quimica}</Row>
+            <Row k="Fabricante/Modelo">{[battery.fabricante, battery.modelo].filter(Boolean).join(" / ") || "—"}</Row>
+            <Row k="Número de série">{battery.numero_serie ?? "—"}</Row>
+            <Row k="Capacidade">{battery.capacidade_kwh ? `${battery.capacidade_kwh} kWh` : "—"}</Row>
+            <Row k="Quantidade">{battery.quantidade}</Row>
+            <Row k="Peso">{battery.peso_kg ? `${battery.peso_kg} kg` : "—"}</Row>
+            <Row k="Estado">{battery.estado}</Row>
+            <Row k="Urgência">{battery.urgencia}</Row>
+            <Row k="Local">{[battery.cidade, battery.uf].filter(Boolean).join("/") || "—"}</Row>
+          </div>
+          {battery.observacoes && <p className="text-xs text-slate-400 mt-3">{battery.observacoes}</p>}
+          <div className="flex flex-wrap gap-2 mt-4">
+            {battery.status === "informacoes_solicitadas" && (
+              <button onClick={() => void resubmit()} className="px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold">Reenviar informações</button>
+            )}
+            {battery.status === "concluida" && (
+              <button onClick={() => void generateCertificate(battery)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold">
+                <FileDown className="w-3.5 h-3.5" /> Certificado PDF
+              </button>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {loading && <div className="p-4 border border-white/10 rounded-md text-sm text-slate-400 mb-4">Carregando informações operacionais...</div>}
+
+      <div className="grid lg:grid-cols-2 gap-4 mb-4">
+        <section className="p-4 border border-white/10 rounded-md">
+          <h2 className="flex items-center gap-2 font-semibold mb-3"><Truck className="w-4 h-4 text-brand" /> Informações da coleta</h2>
+          {!loading && collections.length === 0 && <p className="text-xs text-slate-500">A coleta ainda não foi criada.</p>}
+          <div className="grid gap-3">
+            {collections.map((collection) => (
+              <div key={collection.id} className="p-3 rounded bg-white/5 text-xs grid gap-1.5">
+                <div className="flex justify-between gap-2"><span className="font-mono text-brand">{collection.code ?? "Ordem de coleta"}</span><StatusBadge status={collection.status} /></div>
+                <div className="text-slate-400">{collection.kind === "triagem" ? "Coleta para triagem" : "Envio ao destinador autorizado"}</div>
+                {collection.scheduled_at && <div>Agendada: {new Date(collection.scheduled_at).toLocaleString("pt-BR")}</div>}
+                {collection.collected_at && <div>Retirada: {new Date(collection.collected_at).toLocaleString("pt-BR")}</div>}
+                {collection.delivered_at && <div>Entrega: {new Date(collection.delivered_at).toLocaleString("pt-BR")}</div>}
+                {collection.origin && <div>Origem: {collection.origin}</div>}
+                {collection.destination && <div>Destino: {collection.destination}</div>}
+                {(collection.vehicle || collection.plate) && <div>Veículo: {[collection.vehicle, collection.plate].filter(Boolean).join(" · ")}</div>}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="p-4 border border-white/10 rounded-md">
+          <h2 className="flex items-center gap-2 font-semibold mb-3"><Microscope className="w-4 h-4 text-brand" /> Diagnóstico liberado</h2>
+          {!loading && !diagnostic && <p className="text-xs text-slate-500">O diagnóstico aparecerá após validação técnica.</p>}
+          {diagnostic && (
+            <div className="grid md:grid-cols-2 gap-2 text-sm">
+              <Row k="Classificação">{workflowLabel(diagnostic.classification)}</Row>
+              <Row k="SOH">{diagnostic.soh !== null ? `${diagnostic.soh}%` : "—"}</Row>
+              <Row k="Tensão">{diagnostic.voltage !== null ? `${diagnostic.voltage} V` : "—"}</Row>
+              <Row k="Capacidade medida">{diagnostic.capacity_kwh !== null ? `${diagnostic.capacity_kwh} kWh` : "—"}</Row>
+              <Row k="Temperatura">{diagnostic.temperature !== null ? `${diagnostic.temperature} °C` : "—"}</Row>
+              <Row k="Integridade">{diagnostic.structural_integrity ?? "—"}</Row>
+              <Row k="Risco identificado">{diagnostic.risk ?? "Não informado"}</Row>
+              <Row k="Recomendação">{diagnostic.recommendation ?? "—"}</Row>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4 mb-4">
+        <section className="p-4 border border-white/10 rounded-md">
+          <h2 className="flex items-center gap-2 font-semibold mb-3"><ShieldCheck className="w-4 h-4 text-brand" /> Destino definido</h2>
+          {!loading && !destination && <p className="text-xs text-slate-500">A destinação ainda não foi autorizada no processo.</p>}
+          {destination && (
+            <div className="grid gap-2 text-sm">
+              <Row k="Destino">{destination.destination_type === "segunda_vida" ? "Segunda vida" : "Reciclagem"}</Row>
+              <Row k="Lote">{destination.lot_code}</Row>
+              <Row k="Local">{[destination.city, destination.state].filter(Boolean).join("/") || "Destinador autorizado"}</Row>
+              <Row k="Operação">{destination.operation_status ? workflowLabel(destination.operation_status) : "Em preparação"}</Row>
+            </div>
+          )}
+          <div className="mt-3 p-2 rounded bg-slate-500/10 text-[10px] text-slate-400">
+            Informações comerciais, propostas, valores e identidade de recicladoras permanecem protegidos neste painel.
+          </div>
+        </section>
+
+        <section className="p-4 border border-white/10 rounded-md">
+          <h2 className="flex items-center gap-2 font-semibold mb-3"><FileText className="w-4 h-4 text-brand" /> Documentos finais</h2>
+          {!loading && documents.length === 0 && <p className="text-xs text-slate-500">Documentos serão liberados na etapa de documentação final.</p>}
+          <div className="grid gap-2">
+            {documents.map((document) => (
+              <button
+                key={document.id}
+                disabled={!document.storage_path}
+                onClick={() => void openPrivateFile("workflow-documents", document.storage_path)}
+                className="flex items-center justify-between gap-3 p-2 rounded bg-white/5 text-left text-xs disabled:opacity-50"
+              >
+                <span><span className="text-brand">{workflowLabel(document.type)}</span>{document.number ? ` · ${document.number}` : ""}</span>
+                <StatusBadge status={document.status ?? "pendente"} />
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <section className="p-4 border border-white/10 rounded-md mb-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="flex items-center gap-2 font-semibold"><Paperclip className="w-4 h-4 text-brand" /> Fotos e arquivos</h2>
+          <label className="inline-flex items-center gap-1.5 px-3 py-2 border border-white/10 rounded-md text-xs cursor-pointer hover:bg-white/5">
+            <Upload className="w-3.5 h-3.5" /> {uploading ? "Enviando..." : "Anexar"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf,text/plain"
+              className="hidden"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void uploadFile(file);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+        </div>
+        {files.length === 0 ? <p className="text-xs text-slate-500">Nenhuma foto ou arquivo anexado.</p> : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {files.map((file) => (
+              <button key={file.id} onClick={() => void openPrivateFile("battery-files", file.storage_path)} className="overflow-hidden rounded border border-white/10 bg-white/5 text-left">
+                {file.tipo.startsWith("foto") && file.signedUrl ? (
+                  <img src={file.signedUrl} alt={file.nome_arquivo} className="w-full h-28 object-cover" />
+                ) : (
+                  <div className="h-28 grid place-items-center"><FileText className="w-8 h-8 text-slate-500" /></div>
+                )}
+                <div className="p-2 text-[10px] truncate flex items-center gap-1">{file.tipo.startsWith("foto") ? <ImageIcon className="w-3 h-3" /> : <Paperclip className="w-3 h-3" />}{file.nome_arquivo}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="p-4 border border-white/10 rounded-md">
+        <h2 className="text-xs uppercase font-mono text-slate-400 mb-3">Linha do tempo completa</h2>
         <ol className="border-l border-white/10 pl-4 space-y-3">
           {events.length === 0 && <li className="text-xs text-slate-500">Sem eventos.</li>}
-          {events.map((e) => (
-            <li key={e.id} className="relative">
+          {events.map((event) => (
+            <li key={event.id} className="relative">
               <span className="absolute -left-[21px] top-1 w-2 h-2 rounded-full bg-brand" />
-              <div className="text-sm font-semibold">{batteryStatusLabels[e.event_type] ?? workflowLabel(e.event_type)}</div>
-              {e.notes && <div className="text-xs text-slate-400">{e.notes}</div>}
-              <div className="text-[10px] text-slate-500 font-mono">{new Date(e.created_at).toLocaleString("pt-BR")}</div>
+              <div className="text-sm font-semibold">{batteryStatusLabels[event.event_type] ?? workflowLabel(event.event_type)}</div>
+              {event.notes && <div className="text-xs text-slate-400">{event.notes}</div>}
+              <div className="text-[10px] text-slate-500 font-mono">{new Date(event.created_at).toLocaleString("pt-BR")}</div>
             </li>
           ))}
         </ol>
-      </div>
-    </Modal>
+      </section>
+    </div>
   );
 }
 
