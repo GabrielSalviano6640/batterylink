@@ -4,9 +4,19 @@ import type { Tables } from "@/integrations/supabase/types";
 type Battery = Tables<"batteries">;
 
 const statusPt: Record<string, string> = {
-  delivered: "Entregue",
-  recycled: "Reciclada",
-  second_life: "Destinada a segunda vida",
+  recebida_pelo_destinador: "Recebida pelo destinador",
+  documentacao_pendente: "Documentação pendente",
+  concluida: "Concluída",
+};
+
+const classificationPt: Record<string, string> = {
+  segunda_vida: "Segunda vida",
+  reutilizacao_componentes: "Reutilização de componentes",
+  reciclagem_mecanica: "Reciclagem mecânica",
+  reciclagem_quimica: "Reciclagem química",
+  quarentena_tecnica: "Quarentena técnica",
+  descarte_controlado: "Descarte controlado",
+  aguardando_analise: "Aguardando análise",
 };
 
 export function generateCertificate(battery: Battery, companyName?: string) {
@@ -45,7 +55,7 @@ export function generateCertificate(battery: Battery, companyName?: string) {
   );
 
   // QR
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(battery.code)}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(battery.qr_code_data ?? battery.code)}`;
 
   // Body
   const rows: [string, string][] = [
@@ -58,7 +68,7 @@ export function generateCertificate(battery: Battery, companyName?: string) {
     ["Quantidade", String(battery.quantidade)],
     ["Peso", battery.peso_kg ? `${battery.peso_kg} kg` : "—"],
     ["Localização", [battery.cidade, battery.uf].filter(Boolean).join("/") || "—"],
-    ["Classificação", battery.classificacao === "segunda_vida" ? "Segunda vida" : battery.classificacao === "reciclagem" ? "Reciclagem" : "—"],
+    ["Classificação", battery.classificacao ? (classificationPt[battery.classificacao] ?? battery.classificacao) : "—"],
     ["Gerador (empresa)", companyName ?? "—"],
     ["Emitido em", new Date().toLocaleString("pt-BR")],
   ];
