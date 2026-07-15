@@ -8,6 +8,7 @@ import { NotificationsBell } from "@/components/notifications-bell";
 import { CheckCircle2, XCircle, ArrowLeft, Eye } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { ReportsTab, AuditTab } from "@/components/admin/reports";
+import { AdminControlCenter } from "@/components/admin/control-center";
 
 export const Route = createFileRoute("/_authenticated/app/admin")({
   head: () => ({
@@ -19,12 +20,12 @@ export const Route = createFileRoute("/_authenticated/app/admin")({
   component: AdminPage,
 });
 
-type Tab = "requests" | "leads" | "users" | "companies" | "operations" | "finance" | "reports" | "audit";
+type Tab = "control" | "requests" | "leads" | "users" | "companies" | "operations" | "finance" | "reports" | "audit";
 
 function AdminPage() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("requests");
+  const [tab, setTab] = useState<Tab>("control");
 
   useEffect(() => {
     if (!auth.loading && auth.realRole !== "admin") {
@@ -34,6 +35,7 @@ function AdminPage() {
   }, [auth.loading, auth.realRole, navigate]);
 
   const tabs: { id: Tab; label: string }[] = [
+    { id: "control", label: "Controle geral" },
     { id: "requests", label: "Aprovações" },
     { id: "leads", label: "Leads" },
     { id: "users", label: "Usuários" },
@@ -73,6 +75,7 @@ function AdminPage() {
           ))}
         </div>
 
+        {tab === "control" && <AdminControlCenter />}
         {tab === "requests" && <RequestsTab />}
         {tab === "leads" && <LeadsTab />}
         {tab === "users" && <UsersTab />}
