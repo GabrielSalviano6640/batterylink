@@ -14,6 +14,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Inp, Modal, Sel, StatusBadge } from "./gerador";
+import { uploadPrivateDocument } from "@/lib/private-documents";
 import { workflowRpc } from "@/lib/workflow";
 
 type LotView = {
@@ -368,7 +369,6 @@ export function RecicladorDashboard({ userId }: { userId: string }) {
       {operationAction?.type === "document" && (
         <OperationDocumentModal
           operation={operationAction.operation}
-          userId={userId}
           onClose={() => setOperationAction(null)}
           onSaved={() => {
             setOperationAction(null);
@@ -855,12 +855,10 @@ function DivergenceModal({
 }
 function OperationDocumentModal({
   operation,
-  userId,
   onClose,
   onSaved,
 }: {
   operation: OperationView;
-  userId: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -872,16 +870,7 @@ function OperationDocumentModal({
     if (!(file instanceof File) || !file.size) return;
     setSaving(true);
     try {
-      const path = `${userId}/recycler/${operation.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
-      const { error } = await supabase.storage.from("workflow-documents").upload(path, file);
-      if (error) throw error;
-      await workflowRpc("register_operation_document", {
-        _operation_id: operation.id,
-        _document_type: String(fd.get("type")),
-        _storage_path: path,
-        _document_number: String(fd.get("number") || "") || null,
-        _issuer: "Recicladora",
-      });
+      await uploadPrivateDocument("operation", operation.id, String(fd.get("type")), file);
       toast.success("Documento anexado");
       onSaved();
     } catch (err) {

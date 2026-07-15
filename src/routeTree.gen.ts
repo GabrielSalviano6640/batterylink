@@ -22,6 +22,7 @@ import { Route as ContatoRouteImport } from './routes/contato'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RastreioTokenRouteImport } from './routes/rastreio.$token'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as AuthenticatedAppAdminRouteImport } from './routes/_authenticated/app.admin'
 
@@ -89,6 +90,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RastreioTokenRoute = RastreioTokenRouteImport.update({
+  id: '/rastreio/$token',
+  path: '/rastreio/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   id: '/app',
   path: '/app',
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/termos': typeof TermosRoute
   '/transportadora': typeof TransportadoraRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
+  '/rastreio/$token': typeof RastreioTokenRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
 }
 export interface FileRoutesByTo {
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   '/termos': typeof TermosRoute
   '/transportadora': typeof TransportadoraRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
+  '/rastreio/$token': typeof RastreioTokenRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
 }
 export interface FileRoutesById {
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   '/termos': typeof TermosRoute
   '/transportadora': typeof TransportadoraRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
+  '/rastreio/$token': typeof RastreioTokenRoute
   '/_authenticated/app/admin': typeof AuthenticatedAppAdminRoute
 }
 export interface FileRouteTypes {
@@ -166,6 +175,7 @@ export interface FileRouteTypes {
     | '/termos'
     | '/transportadora'
     | '/app'
+    | '/rastreio/$token'
     | '/app/admin'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -182,6 +192,7 @@ export interface FileRouteTypes {
     | '/termos'
     | '/transportadora'
     | '/app'
+    | '/rastreio/$token'
     | '/app/admin'
   id:
     | '__root__'
@@ -199,6 +210,7 @@ export interface FileRouteTypes {
     | '/termos'
     | '/transportadora'
     | '/_authenticated/app'
+    | '/rastreio/$token'
     | '/_authenticated/app/admin'
   fileRoutesById: FileRoutesById
 }
@@ -216,6 +228,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermosRoute: typeof TermosRoute
   TransportadoraRoute: typeof TransportadoraRoute
+  RastreioTokenRoute: typeof RastreioTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -311,6 +324,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/rastreio/$token': {
+      id: '/rastreio/$token'
+      path: '/rastreio/$token'
+      fullPath: '/rastreio/$token'
+      preLoaderRoute: typeof RastreioTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/app': {
       id: '/_authenticated/app'
       path: '/app'
@@ -364,6 +384,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermosRoute: TermosRoute,
   TransportadoraRoute: TransportadoraRoute,
+  RastreioTokenRoute: RastreioTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

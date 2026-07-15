@@ -16,10 +16,10 @@ import {
   ShieldCheck,
   Siren,
   Truck,
-  Upload,
 } from "lucide-react";
 import { Modal, StatusBadge, Inp, Sel } from "./gerador";
 import { workflowRpc } from "@/lib/workflow";
+import { uploadPrivateDocument } from "@/lib/private-documents";
 
 type Battery = Tables<"batteries">;
 type Lot = Tables<"lots">;
@@ -133,7 +133,7 @@ export function OperadorDashboard({ userId }: { userId: string }) {
       </div>
 
       {tab === "batteries" ? (
-        <BatteriesTab userId={userId} />
+        <BatteriesTab />
       ) : tab === "lots" ? (
         <LotsTab userId={userId} />
       ) : tab === "operations" ? (
@@ -145,7 +145,7 @@ export function OperadorDashboard({ userId }: { userId: string }) {
   );
 }
 
-function BatteriesTab({ userId }: { userId: string }) {
+function BatteriesTab() {
   const [items, setItems] = useState<Battery[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [filter, setFilter] = useState<string>("all");
@@ -289,7 +289,6 @@ function BatteriesTab({ userId }: { userId: string }) {
       {triage && (
         <TriageModal
           battery={triage}
-          userId={userId}
           onClose={() => setTriage(null)}
           onSaved={() => {
             void load();
@@ -541,12 +540,10 @@ function CreateCollectionModal({
 
 function TriageModal({
   battery,
-  userId,
   onClose,
   onSaved,
 }: {
   battery: Battery;
-  userId: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -575,16 +572,7 @@ function TriageModal({
         _organization_id: null,
       });
       if (report instanceof File && report.size > 0) {
-        const safeName = report.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-        const path = `${userId}/technical/${battery.id}/${Date.now()}-${safeName}`;
-        const { error } = await supabase.storage.from("workflow-documents").upload(path, report);
-        if (error) throw error;
-        await workflowRpc("register_technical_report", {
-          _battery_id: battery.id,
-          _storage_path: path,
-          _number: null,
-          _notes: notas || null,
-        });
+        await uploadPrivateDocument("battery", battery.id, "laudo_triagem", report);
       }
       toast.success("Bateria classificada");
       refreshOperatorSummary();

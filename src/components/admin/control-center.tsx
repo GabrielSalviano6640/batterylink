@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { exportCsv } from "@/lib/export-csv";
 import { workflowRpc } from "@/lib/workflow";
+import { logicalDeletePrivateDocument, openPrivateDocument } from "@/lib/private-documents";
 import { StatusBadge } from "@/components/dashboards/gerador";
 
 type Summary = {
@@ -54,6 +55,7 @@ type Entity =
   | "operations"
   | "documents"
   | "organization_documents"
+  | "private_documents"
   | "incidents"
   | "notifications"
   | "audit"
@@ -93,6 +95,7 @@ const labels: Record<Entity, string> = {
   operations: "Operações",
   documents: "Documentos operacionais",
   organization_documents: "Documentos de organizações",
+  private_documents: "Documentos privados",
   incidents: "Ocorrências",
   notifications: "Notificações",
   audit: "Auditoria",
@@ -218,13 +221,33 @@ export function AdminControlCenter() {
     const reason = askReason(approve ? "Parecer de validação:" : "Motivo da rejeição:");
     if (!reason) return;
     try {
-      await workflowRpc("admin_validate_document", {
-        _document_id: row.id,
-        _organization_document: entity === "organization_documents",
-        _approve: approve,
-        _reason: reason,
-      });
+      if (entity === "private_documents") {
+        await workflowRpc("validate_private_document", {
+          _document_id: row.id,
+          _approve: approve,
+          _notes: reason,
+        });
+      } else {
+        await workflowRpc("admin_validate_document", {
+          _document_id: row.id,
+          _organization_document: entity === "organization_documents",
+          _approve: approve,
+          _reason: reason,
+        });
+      }
       toast.success("Documento analisado");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro");
+    }
+  };
+  const deletePrivateDocument = async (row: Row) => {
+    if (!row.id) return;
+    const reason = askReason("Motivo da exclusão lógica:");
+    if (!reason) return;
+    try {
+      await logicalDeletePrivateDocument(row.id, reason);
+      toast.success("Documento removido logicamente; o histórico foi preservado");
       await reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro");
@@ -417,7 +440,9 @@ export function AdminControlCenter() {
                       </button>
                     </>
                   )}
-                  {["documents", "organization_documents"].includes(entity) && (
+                  {["documents", "organization_documents", "private_documents"].includes(
+                    entity,
+                  ) && (
                     <>
                       <button
                         onClick={() => void validateDocument(row, true)}
@@ -430,6 +455,22 @@ export function AdminControlCenter() {
                         className="text-danger text-xs"
                       >
                         Rejeitar
+                      </button>
+                    </>
+                  )}
+                  {entity === "private_documents" && (
+                    <>
+                      <button
+                        onClick={() => row.id && void openPrivateDocument(row.id)}
+                        className="text-sky-300 text-xs"
+                      >
+                        Abrir
+                      </button>
+                      <button
+                        onClick={() => void deletePrivateDocument(row)}
+                        className="text-danger text-xs"
+                      >
+                        Excluir logicamente
                       </button>
                     </>
                   )}

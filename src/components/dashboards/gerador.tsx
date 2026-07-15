@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { generateCertificate } from "@/lib/certificate";
 import { batteryStatusLabels, transitionBattery, workflowLabel, workflowRpc } from "@/lib/workflow";
+import { openWorkflowDocument, uploadPrivateDocument } from "@/lib/private-documents";
 
 type Battery = Tables<"batteries">;
 type BatteryFile = Tables<"battery_files">;
@@ -137,37 +138,48 @@ export function GeradorDashboard({ userId }: { userId: string }) {
     () => Array.from(new Set(items.map((b) => b.quimica))).sort(),
     [items],
   );
-  const statuses = useMemo(
-    () => Array.from(new Set(items.map((b) => b.status))),
-    [items],
+  const statuses = useMemo(() => Array.from(new Set(items.map((b) => b.status))), [items]);
+  const filtered = useMemo(
+    () =>
+      items.filter((b) => {
+        const term = q.trim().toLowerCase();
+        const created = new Date(b.created_at);
+        return (
+          (!term || b.code.toLowerCase().includes(term)) &&
+          (statusFilter === "all" || b.status === statusFilter) &&
+          (chemistryFilter === "all" || b.quimica === chemistryFilter) &&
+          (!from || created >= new Date(`${from}T00:00:00`)) &&
+          (!to || created <= new Date(`${to}T23:59:59`))
+        );
+      }),
+    [items, q, statusFilter, chemistryFilter, from, to],
   );
-  const filtered = useMemo(() => items.filter((b) => {
-    const term = q.trim().toLowerCase();
-    const created = new Date(b.created_at);
-    return (
-      (!term || b.code.toLowerCase().includes(term))
-      && (statusFilter === "all" || b.status === statusFilter)
-      && (chemistryFilter === "all" || b.quimica === chemistryFilter)
-      && (!from || created >= new Date(`${from}T00:00:00`))
-      && (!to || created <= new Date(`${to}T23:59:59`))
-    );
-  }), [items, q, statusFilter, chemistryFilter, from, to]);
 
-  const indicators = useMemo(() => ({
-    total: summary?.total_batteries ?? items.length,
-    open: summary?.open_requests ?? items.filter((b) => openRequestStatuses.has(b.status)).length,
-    scheduled: summary?.scheduled_collections ?? items.filter((b) => b.status === "coleta_agendada").length,
-    triage: summary?.in_triage ?? items.filter((b) => triageStatuses.has(b.status)).length,
-    completed: summary?.completed_operations ?? items.filter((b) => b.status === "concluida").length,
-    pendingDocuments: summary?.pending_documents ?? items.filter((b) => b.status === "documentacao_pendente").length,
-  }), [items, summary]);
+  const indicators = useMemo(
+    () => ({
+      total: summary?.total_batteries ?? items.length,
+      open: summary?.open_requests ?? items.filter((b) => openRequestStatuses.has(b.status)).length,
+      scheduled:
+        summary?.scheduled_collections ??
+        items.filter((b) => b.status === "coleta_agendada").length,
+      triage: summary?.in_triage ?? items.filter((b) => triageStatuses.has(b.status)).length,
+      completed:
+        summary?.completed_operations ?? items.filter((b) => b.status === "concluida").length,
+      pendingDocuments:
+        summary?.pending_documents ??
+        items.filter((b) => b.status === "documentacao_pendente").length,
+    }),
+    [items, summary],
+  );
 
   const environmental = useMemo(() => {
     const completed = items.filter((b) => b.status === "concluida");
-    const massKg = summary?.estimated_mass_kg
-      ?? completed.reduce((sum, b) => sum + (Number(b.peso_kg) || 0) * b.quantidade, 0);
-    const capacityKwh = summary?.estimated_capacity_kwh
-      ?? completed.reduce((sum, b) => sum + (Number(b.capacidade_kwh) || 0) * b.quantidade, 0);
+    const massKg =
+      summary?.estimated_mass_kg ??
+      completed.reduce((sum, b) => sum + (Number(b.peso_kg) || 0) * b.quantidade, 0);
+    const capacityKwh =
+      summary?.estimated_capacity_kwh ??
+      completed.reduce((sum, b) => sum + (Number(b.capacidade_kwh) || 0) * b.quantidade, 0);
     return { massKg, capacityKwh, co2Kg: massKg * 2.5 };
   }, [items, summary]);
 
@@ -175,7 +187,6 @@ export function GeradorDashboard({ userId }: { userId: string }) {
     return (
       <BatteryDetailPage
         battery={detail}
-        userId={userId}
         onBack={() => setDetail(null)}
         onChanged={() => void load()}
       />
@@ -188,7 +199,9 @@ export function GeradorDashboard({ userId }: { userId: string }) {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <BatteryCharging className="w-5 h-5 text-brand" />
-            <p className="font-mono text-xs text-brand tracking-widest uppercase">Painel · Gerador</p>
+            <p className="font-mono text-xs text-brand tracking-widest uppercase">
+              Painel · Gerador
+            </p>
           </div>
           <h1 className="text-2xl font-display font-bold">Visão geral</h1>
         </div>
@@ -201,26 +214,68 @@ export function GeradorDashboard({ userId }: { userId: string }) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
-        <KpiCard label="Baterias cadastradas" value={indicators.total} icon={<BatteryCharging className="w-4 h-4" />} />
-        <KpiCard label="Solicitações abertas" value={indicators.open} icon={<FileWarning className="w-4 h-4" />} />
-        <KpiCard label="Coletas agendadas" value={indicators.scheduled} icon={<CalendarClock className="w-4 h-4" />} />
-        <KpiCard label="Em triagem" value={indicators.triage} icon={<Microscope className="w-4 h-4" />} />
-        <KpiCard label="Operações concluídas" value={indicators.completed} icon={<CheckCircle2 className="w-4 h-4" />} accent />
-        <KpiCard label="Documentos pendentes" value={indicators.pendingDocuments} icon={<FileText className="w-4 h-4" />} />
+        <KpiCard
+          label="Baterias cadastradas"
+          value={indicators.total}
+          icon={<BatteryCharging className="w-4 h-4" />}
+        />
+        <KpiCard
+          label="Solicitações abertas"
+          value={indicators.open}
+          icon={<FileWarning className="w-4 h-4" />}
+        />
+        <KpiCard
+          label="Coletas agendadas"
+          value={indicators.scheduled}
+          icon={<CalendarClock className="w-4 h-4" />}
+        />
+        <KpiCard
+          label="Em triagem"
+          value={indicators.triage}
+          icon={<Microscope className="w-4 h-4" />}
+        />
+        <KpiCard
+          label="Operações concluídas"
+          value={indicators.completed}
+          icon={<CheckCircle2 className="w-4 h-4" />}
+          accent
+        />
+        <KpiCard
+          label="Documentos pendentes"
+          value={indicators.pendingDocuments}
+          icon={<FileText className="w-4 h-4" />}
+        />
       </div>
 
       <section className="mb-6">
         <div className="flex items-center gap-2 mb-3">
           <Leaf className="w-4 h-4 text-brand" />
           <h2 className="text-sm font-semibold">Indicadores ambientais</h2>
-          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300">Estimativas</span>
+          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300">
+            Estimativas
+          </span>
         </div>
         <div className="grid md:grid-cols-3 gap-3">
-          <EstimateCard label="Massa destinada" value={`${environmental.massKg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg`} icon={<Scale className="w-4 h-4" />} />
-          <EstimateCard label="Capacidade encaminhada" value={`${environmental.capacityKwh.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kWh`} icon={<Zap className="w-4 h-4" />} />
-          <EstimateCard label="CO₂ potencialmente evitado" value={`${environmental.co2Kg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg CO₂e`} icon={<Leaf className="w-4 h-4" />} />
+          <EstimateCard
+            label="Massa destinada"
+            value={`${environmental.massKg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg`}
+            icon={<Scale className="w-4 h-4" />}
+          />
+          <EstimateCard
+            label="Capacidade encaminhada"
+            value={`${environmental.capacityKwh.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kWh`}
+            icon={<Zap className="w-4 h-4" />}
+          />
+          <EstimateCard
+            label="CO₂ potencialmente evitado"
+            value={`${environmental.co2Kg.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg CO₂e`}
+            icon={<Leaf className="w-4 h-4" />}
+          />
         </div>
-        <p className="text-[10px] text-slate-500 mt-2">Estimativas informativas baseadas nos dados cadastrados e em fator indicativo de 2,5 kg CO₂e por kg destinado. Não substituem inventário ou laudo ambiental.</p>
+        <p className="text-[10px] text-slate-500 mt-2">
+          Estimativas informativas baseadas nos dados cadastrados e em fator indicativo de 2,5 kg
+          CO₂e por kg destinado. Não substituem inventário ou laudo ambiental.
+        </p>
       </section>
 
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -237,17 +292,45 @@ export function GeradorDashboard({ userId }: { userId: string }) {
             className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm"
           />
         </label>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm"
+        >
           <option value="all">Todos os status</option>
-          {statuses.map((status) => <option key={status} value={status}>{workflowLabel(status)}</option>)}
+          {statuses.map((status) => (
+            <option key={status} value={status}>
+              {workflowLabel(status)}
+            </option>
+          ))}
         </select>
-        <select value={chemistryFilter} onChange={(e) => setChemistryFilter(e.target.value)} className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm">
+        <select
+          value={chemistryFilter}
+          onChange={(e) => setChemistryFilter(e.target.value)}
+          className="px-3 py-2 bg-white/5 border border-white/10 rounded-md text-sm"
+        >
           <option value="all">Todas as químicas</option>
-          {chemistries.map((chemistry) => <option key={chemistry} value={chemistry}>{chemistry}</option>)}
+          {chemistries.map((chemistry) => (
+            <option key={chemistry} value={chemistry}>
+              {chemistry}
+            </option>
+          ))}
         </select>
         <div className="grid grid-cols-2 gap-2">
-          <input aria-label="Período inicial" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="min-w-0 px-2 py-2 bg-white/5 border border-white/10 rounded-md text-xs" />
-          <input aria-label="Período final" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="min-w-0 px-2 py-2 bg-white/5 border border-white/10 rounded-md text-xs" />
+          <input
+            aria-label="Período inicial"
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="min-w-0 px-2 py-2 bg-white/5 border border-white/10 rounded-md text-xs"
+          />
+          <input
+            aria-label="Período final"
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="min-w-0 px-2 py-2 bg-white/5 border border-white/10 rounded-md text-xs"
+          />
         </div>
       </div>
 
@@ -265,41 +348,94 @@ export function GeradorDashboard({ userId }: { userId: string }) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">Carregando...</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">Nenhuma bateria registrada.</td></tr>
-            ) : filtered.map((b) => (
-              <tr key={b.id} onClick={() => setDetail(b)} className="border-t border-white/5 hover:bg-white/5 cursor-pointer">
-                <td className="px-3 py-2 font-mono text-brand">{b.code}</td>
-                <td className="px-3 py-2">{b.origem}</td>
-                <td className="px-3 py-2">{b.quimica}</td>
-                <td className="px-3 py-2">{b.quantidade}</td>
-                <td className="px-3 py-2"><StatusBadge status={b.status} /></td>
-                <td className="px-3 py-2 text-slate-400">{new Date(b.created_at).toLocaleDateString("pt-BR")}</td>
+              <tr>
+                <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
+                  Carregando...
+                </td>
               </tr>
-            ))}
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
+                  Nenhuma bateria registrada.
+                </td>
+              </tr>
+            ) : (
+              filtered.map((b) => (
+                <tr
+                  key={b.id}
+                  onClick={() => setDetail(b)}
+                  className="border-t border-white/5 hover:bg-white/5 cursor-pointer"
+                >
+                  <td className="px-3 py-2 font-mono text-brand">{b.code}</td>
+                  <td className="px-3 py-2">{b.origem}</td>
+                  <td className="px-3 py-2">{b.quimica}</td>
+                  <td className="px-3 py-2">{b.quantidade}</td>
+                  <td className="px-3 py-2">
+                    <StatusBadge status={b.status} />
+                  </td>
+                  <td className="px-3 py-2 text-slate-400">
+                    {new Date(b.created_at).toLocaleDateString("pt-BR")}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {showForm && <NewBatteryModal userId={userId} onClose={() => setShowForm(false)} onCreated={() => { void load(); setShowForm(false); }} />}
+      {showForm && (
+        <NewBatteryModal
+          userId={userId}
+          onClose={() => setShowForm(false)}
+          onCreated={() => {
+            void load();
+            setShowForm(false);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function KpiCard({ label, value, icon, accent }: { label: string; value: number; icon: React.ReactNode; accent?: boolean }) {
+function KpiCard({
+  label,
+  value,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  accent?: boolean;
+}) {
   return (
     <div className="p-3 rounded-md bg-white/5 border border-white/10">
-      <div className={`flex items-center gap-1.5 text-[10px] uppercase font-mono mb-2 ${accent ? "text-brand" : "text-slate-500"}`}>{icon}{label}</div>
+      <div
+        className={`flex items-center gap-1.5 text-[10px] uppercase font-mono mb-2 ${accent ? "text-brand" : "text-slate-500"}`}
+      >
+        {icon}
+        {label}
+      </div>
       <div className={`text-2xl font-display font-bold ${accent ? "text-brand" : ""}`}>{value}</div>
     </div>
   );
 }
 
-function EstimateCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+function EstimateCard({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+}) {
   return (
     <div className="p-3 rounded-md border border-brand/15 bg-brand/5">
-      <div className="flex items-center gap-1.5 text-xs text-brand mb-1">{icon}{label}</div>
+      <div className="flex items-center gap-1.5 text-xs text-brand mb-1">
+        {icon}
+        {label}
+      </div>
       <div className="font-display font-bold text-lg">{value}</div>
     </div>
   );
@@ -340,13 +476,23 @@ export function StatusBadge({ status }: { status: string }) {
     enviada: "bg-violet-500/20 text-violet-300",
   };
   return (
-    <span className={`inline-block px-2 py-0.5 rounded text-xs font-mono ${color[status] ?? "bg-white/10"}`}>
+    <span
+      className={`inline-block px-2 py-0.5 rounded text-xs font-mono ${color[status] ?? "bg-white/10"}`}
+    >
       {workflowLabel(status)}
     </span>
   );
 }
 
-function NewBatteryModal({ userId, onClose, onCreated }: { userId: string; onClose: () => void; onCreated: () => void }) {
+function NewBatteryModal({
+  userId,
+  onClose,
+  onCreated,
+}: {
+  userId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const [saving, setSaving] = useState(false);
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
@@ -374,7 +520,11 @@ function NewBatteryModal({ userId, onClose, onCreated }: { userId: string; onClo
       };
       const { data, error } = await supabase.from("batteries").insert(payload).select().single();
       if (error) throw error;
-      await transitionBattery(data.id, "aguardando_analise", "Cadastro enviado para análise do operador");
+      await transitionBattery(
+        data.id,
+        "aguardando_analise",
+        "Cadastro enviado para análise do operador",
+      );
       toast.success(`Bateria ${data.code} registrada`);
       onCreated();
     } catch (err) {
@@ -388,15 +538,49 @@ function NewBatteryModal({ userId, onClose, onCreated }: { userId: string; onClo
     <Modal onClose={onClose} title="Nova bateria">
       <form onSubmit={submit} className="grid gap-3 text-sm">
         <div className="grid md:grid-cols-2 gap-3">
-          <Sel name="origem" label="Origem" required options={["Veículo elétrico","Veículo híbrido","Frota comercial","Máquina industrial","BESS","Outro"]} />
-          <Sel name="quimica" label="Química" required options={["LFP","NMC","NCA","LTO","Chumbo-ácido","Outra"]} />
+          <Sel
+            name="origem"
+            label="Origem"
+            required
+            options={[
+              "Veículo elétrico",
+              "Veículo híbrido",
+              "Frota comercial",
+              "Máquina industrial",
+              "BESS",
+              "Outro",
+            ]}
+          />
+          <Sel
+            name="quimica"
+            label="Química"
+            required
+            options={["LFP", "NMC", "NCA", "LTO", "Chumbo-ácido", "Outra"]}
+          />
           <Inp name="fabricante" label="Fabricante" />
           <Inp name="modelo" label="Modelo" />
           <Inp name="capacidade" label="Capacidade (kWh)" type="number" step="0.1" />
-          <Inp name="quantidade" label="Quantidade" type="number" required defaultValue={1} min={1} />
+          <Inp
+            name="quantidade"
+            label="Quantidade"
+            type="number"
+            required
+            defaultValue={1}
+            min={1}
+          />
           <Inp name="peso" label="Peso (kg)" type="number" step="0.1" />
-          <Sel name="estado_bat" label="Estado" required options={["Íntegra","Fim de vida","Avariada","Sinistrada","Inchada/vazamento"]} />
-          <Sel name="urgencia" label="Urgência" required options={["Baixa (30d)","Média (15d)","Alta (7d)","Emergencial"]} />
+          <Sel
+            name="estado_bat"
+            label="Estado"
+            required
+            options={["Íntegra", "Fim de vida", "Avariada", "Sinistrada", "Inchada/vazamento"]}
+          />
+          <Sel
+            name="urgencia"
+            label="Urgência"
+            required
+            options={["Baixa (30d)", "Média (15d)", "Alta (7d)", "Emergencial"]}
+          />
           <Inp name="cep" label="CEP" />
           <Inp name="cidade" label="Cidade" />
           <Inp name="uf" label="UF" maxLength={2} />
@@ -404,11 +588,25 @@ function NewBatteryModal({ userId, onClose, onCreated }: { userId: string; onClo
         <Inp name="endereco" label="Endereço de coleta" />
         <label className="grid gap-1">
           <span className="text-xs text-slate-400">Observações</span>
-          <textarea name="observacoes" rows={3} className="px-3 py-2 bg-white/5 border border-white/10 rounded-md" />
+          <textarea
+            name="observacoes"
+            rows={3}
+            className="px-3 py-2 bg-white/5 border border-white/10 rounded-md"
+          />
         </label>
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 border border-white/10 rounded-md">Cancelar</button>
-          <button type="submit" disabled={saving} className="px-4 py-2 bg-brand text-industrial rounded-md font-semibold disabled:opacity-50">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 border border-white/10 rounded-md"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-4 py-2 bg-brand text-industrial rounded-md font-semibold disabled:opacity-50"
+          >
             {saving ? "Salvando..." : "Registrar"}
           </button>
         </div>
@@ -422,12 +620,10 @@ type DisplayFile = BatteryFile & { signedUrl?: string };
 
 function BatteryDetailPage({
   battery,
-  userId,
   onBack,
   onChanged,
 }: {
   battery: Battery;
-  userId: string;
   onBack: () => void;
   onChanged: () => void;
 }) {
@@ -441,16 +637,28 @@ function BatteryDetailPage({
     setLoading(true);
     try {
       const [{ data: eventRows }, { data: fileRows }, detailContext] = await Promise.all([
-        supabase.from("battery_events").select("*").eq("battery_id", battery.id).order("created_at", { ascending: true }),
-        supabase.from("battery_files").select("*").eq("battery_id", battery.id).order("created_at", { ascending: false }),
+        supabase
+          .from("battery_events")
+          .select("*")
+          .eq("battery_id", battery.id)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("battery_files")
+          .select("*")
+          .eq("battery_id", battery.id)
+          .order("created_at", { ascending: false }),
         workflowRpc<GeneratorContext>("get_generator_battery_context", { _battery_id: battery.id }),
       ]);
       const rows = fileRows ?? [];
-      const withUrls = await Promise.all(rows.map(async (file) => {
-        if (!file.tipo.startsWith("foto")) return file;
-        const { data } = await supabase.storage.from("battery-files").createSignedUrl(file.storage_path, 3600);
-        return { ...file, signedUrl: data?.signedUrl };
-      }));
+      const withUrls = await Promise.all(
+        rows.map(async (file) => {
+          if (!file.tipo.startsWith("foto")) return file;
+          const { data } = await supabase.storage
+            .from(file.bucket_id ?? "battery-files")
+            .createSignedUrl(file.storage_path, 3600);
+          return { ...file, signedUrl: data?.signedUrl };
+        }),
+      );
       setEvents(eventRows ?? []);
       setFiles(withUrls);
       setContext(detailContext);
@@ -468,7 +676,9 @@ function BatteryDetailPage({
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(battery.qr_code_data ?? battery.code)}`;
 
   const resubmit = async () => {
-    const note = window.prompt("Informe o que foi atualizado para o operador:") ?? "Informações atualizadas pelo gerador";
+    const note =
+      window.prompt("Informe o que foi atualizado para o operador:") ??
+      "Informações atualizadas pelo gerador";
     try {
       await transitionBattery(battery.id, "aguardando_analise", note);
       toast.success("Bateria reenviada para análise");
@@ -482,18 +692,12 @@ function BatteryDetailPage({
   const uploadFile = async (file: File) => {
     setUploading(true);
     try {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-      const path = `${userId}/${battery.id}/${crypto.randomUUID()}-${safeName}`;
-      const { error: uploadError } = await supabase.storage.from("battery-files").upload(path, file, { upsert: false });
-      if (uploadError) throw uploadError;
-      const { error: metadataError } = await supabase.from("battery_files").insert({
-        battery_id: battery.id,
-        tipo: file.type.startsWith("image/") ? "foto" : "arquivo",
-        nome_arquivo: file.name,
-        storage_path: path,
-        uploaded_by: userId,
-      });
-      if (metadataError) throw metadataError;
+      await uploadPrivateDocument(
+        "battery",
+        battery.id,
+        file.type.startsWith("image/") ? "foto" : "arquivo",
+        file,
+      );
       toast.success("Arquivo anexado");
       await loadDetail();
     } catch (err) {
@@ -517,12 +721,17 @@ function BatteryDetailPage({
 
   return (
     <div>
-      <button onClick={onBack} className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white mb-4">
+      <button
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white mb-4"
+      >
         <ArrowLeft className="w-4 h-4" /> Voltar para o painel
       </button>
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <p className="font-mono text-xs text-brand tracking-widest uppercase">Detalhes da bateria</p>
+          <p className="font-mono text-xs text-brand tracking-widest uppercase">
+            Detalhes da bateria
+          </p>
           <h1 className="text-2xl font-display font-bold mt-1">{battery.code}</h1>
         </div>
         <StatusBadge status={battery.status} />
@@ -530,30 +739,52 @@ function BatteryDetailPage({
 
       <div className="grid lg:grid-cols-[220px_1fr] gap-4 mb-4">
         <section className="p-4 border border-white/10 rounded-md bg-white/5 flex flex-col items-center gap-2">
-          <img src={qrUrl} alt={`QR ${battery.code}`} className="rounded bg-white p-2" width={180} height={180} />
-          <span className="text-xs text-slate-400 inline-flex items-center gap-1"><QrCode className="w-3 h-3" /> Rastreio individual</span>
+          <img
+            src={qrUrl}
+            alt={`QR ${battery.code}`}
+            className="rounded bg-white p-2"
+            width={180}
+            height={180}
+          />
+          <span className="text-xs text-slate-400 inline-flex items-center gap-1">
+            <QrCode className="w-3 h-3" /> Rastreio individual
+          </span>
         </section>
         <section className="p-4 border border-white/10 rounded-md bg-white/5">
           <h2 className="text-xs uppercase font-mono text-slate-400 mb-3">Dados cadastrados</h2>
           <div className="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <Row k="Origem">{battery.origem}</Row>
             <Row k="Química">{battery.quimica}</Row>
-            <Row k="Fabricante/Modelo">{[battery.fabricante, battery.modelo].filter(Boolean).join(" / ") || "—"}</Row>
+            <Row k="Fabricante/Modelo">
+              {[battery.fabricante, battery.modelo].filter(Boolean).join(" / ") || "—"}
+            </Row>
             <Row k="Número de série">{battery.numero_serie ?? "—"}</Row>
-            <Row k="Capacidade">{battery.capacidade_kwh ? `${battery.capacidade_kwh} kWh` : "—"}</Row>
+            <Row k="Capacidade">
+              {battery.capacidade_kwh ? `${battery.capacidade_kwh} kWh` : "—"}
+            </Row>
             <Row k="Quantidade">{battery.quantidade}</Row>
             <Row k="Peso">{battery.peso_kg ? `${battery.peso_kg} kg` : "—"}</Row>
             <Row k="Estado">{battery.estado}</Row>
             <Row k="Urgência">{battery.urgencia}</Row>
             <Row k="Local">{[battery.cidade, battery.uf].filter(Boolean).join("/") || "—"}</Row>
           </div>
-          {battery.observacoes && <p className="text-xs text-slate-400 mt-3">{battery.observacoes}</p>}
+          {battery.observacoes && (
+            <p className="text-xs text-slate-400 mt-3">{battery.observacoes}</p>
+          )}
           <div className="flex flex-wrap gap-2 mt-4">
             {battery.status === "informacoes_solicitadas" && (
-              <button onClick={() => void resubmit()} className="px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold">Reenviar informações</button>
+              <button
+                onClick={() => void resubmit()}
+                className="px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold"
+              >
+                Reenviar informações
+              </button>
             )}
             {battery.status === "concluida" && (
-              <button onClick={() => void generateCertificate(battery)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold">
+              <button
+                onClick={() => void generateCertificate(battery)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand text-industrial rounded-md text-xs font-semibold"
+              >
                 <FileDown className="w-3.5 h-3.5" /> Certificado PDF
               </button>
             )}
@@ -561,38 +792,75 @@ function BatteryDetailPage({
         </section>
       </div>
 
-      {loading && <div className="p-4 border border-white/10 rounded-md text-sm text-slate-400 mb-4">Carregando informações operacionais...</div>}
+      {loading && (
+        <div className="p-4 border border-white/10 rounded-md text-sm text-slate-400 mb-4">
+          Carregando informações operacionais...
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-4 mb-4">
         <section className="p-4 border border-white/10 rounded-md">
-          <h2 className="flex items-center gap-2 font-semibold mb-3"><Truck className="w-4 h-4 text-brand" /> Informações da coleta</h2>
-          {!loading && collections.length === 0 && <p className="text-xs text-slate-500">A coleta ainda não foi criada.</p>}
+          <h2 className="flex items-center gap-2 font-semibold mb-3">
+            <Truck className="w-4 h-4 text-brand" /> Informações da coleta
+          </h2>
+          {!loading && collections.length === 0 && (
+            <p className="text-xs text-slate-500">A coleta ainda não foi criada.</p>
+          )}
           <div className="grid gap-3">
             {collections.map((collection) => (
               <div key={collection.id} className="p-3 rounded bg-white/5 text-xs grid gap-1.5">
-                <div className="flex justify-between gap-2"><span className="font-mono text-brand">{collection.code ?? "Ordem de coleta"}</span><StatusBadge status={collection.status} /></div>
-                <div className="text-slate-400">{collection.kind === "triagem" ? "Coleta para triagem" : "Envio ao destinador autorizado"}</div>
-                {collection.scheduled_at && <div>Agendada: {new Date(collection.scheduled_at).toLocaleString("pt-BR")}</div>}
-                {collection.collected_at && <div>Retirada: {new Date(collection.collected_at).toLocaleString("pt-BR")}</div>}
-                {collection.delivered_at && <div>Entrega: {new Date(collection.delivered_at).toLocaleString("pt-BR")}</div>}
+                <div className="flex justify-between gap-2">
+                  <span className="font-mono text-brand">
+                    {collection.code ?? "Ordem de coleta"}
+                  </span>
+                  <StatusBadge status={collection.status} />
+                </div>
+                <div className="text-slate-400">
+                  {collection.kind === "triagem"
+                    ? "Coleta para triagem"
+                    : "Envio ao destinador autorizado"}
+                </div>
+                {collection.scheduled_at && (
+                  <div>Agendada: {new Date(collection.scheduled_at).toLocaleString("pt-BR")}</div>
+                )}
+                {collection.collected_at && (
+                  <div>Retirada: {new Date(collection.collected_at).toLocaleString("pt-BR")}</div>
+                )}
+                {collection.delivered_at && (
+                  <div>Entrega: {new Date(collection.delivered_at).toLocaleString("pt-BR")}</div>
+                )}
                 {collection.origin && <div>Origem: {collection.origin}</div>}
                 {collection.destination && <div>Destino: {collection.destination}</div>}
-                {(collection.vehicle || collection.plate) && <div>Veículo: {[collection.vehicle, collection.plate].filter(Boolean).join(" · ")}</div>}
+                {(collection.vehicle || collection.plate) && (
+                  <div>
+                    Veículo: {[collection.vehicle, collection.plate].filter(Boolean).join(" · ")}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </section>
 
         <section className="p-4 border border-white/10 rounded-md">
-          <h2 className="flex items-center gap-2 font-semibold mb-3"><Microscope className="w-4 h-4 text-brand" /> Diagnóstico liberado</h2>
-          {!loading && !diagnostic && <p className="text-xs text-slate-500">O diagnóstico aparecerá após validação técnica.</p>}
+          <h2 className="flex items-center gap-2 font-semibold mb-3">
+            <Microscope className="w-4 h-4 text-brand" /> Diagnóstico liberado
+          </h2>
+          {!loading && !diagnostic && (
+            <p className="text-xs text-slate-500">
+              O diagnóstico aparecerá após validação técnica.
+            </p>
+          )}
           {diagnostic && (
             <div className="grid md:grid-cols-2 gap-2 text-sm">
               <Row k="Classificação">{workflowLabel(diagnostic.classification)}</Row>
               <Row k="SOH">{diagnostic.soh !== null ? `${diagnostic.soh}%` : "—"}</Row>
               <Row k="Tensão">{diagnostic.voltage !== null ? `${diagnostic.voltage} V` : "—"}</Row>
-              <Row k="Capacidade medida">{diagnostic.capacity_kwh !== null ? `${diagnostic.capacity_kwh} kWh` : "—"}</Row>
-              <Row k="Temperatura">{diagnostic.temperature !== null ? `${diagnostic.temperature} °C` : "—"}</Row>
+              <Row k="Capacidade medida">
+                {diagnostic.capacity_kwh !== null ? `${diagnostic.capacity_kwh} kWh` : "—"}
+              </Row>
+              <Row k="Temperatura">
+                {diagnostic.temperature !== null ? `${diagnostic.temperature} °C` : "—"}
+              </Row>
               <Row k="Integridade">{diagnostic.structural_integrity ?? "—"}</Row>
               <Row k="Risco identificado">{diagnostic.risk ?? "Não informado"}</Row>
               <Row k="Recomendação">{diagnostic.recommendation ?? "—"}</Row>
@@ -603,33 +871,58 @@ function BatteryDetailPage({
 
       <div className="grid lg:grid-cols-2 gap-4 mb-4">
         <section className="p-4 border border-white/10 rounded-md">
-          <h2 className="flex items-center gap-2 font-semibold mb-3"><ShieldCheck className="w-4 h-4 text-brand" /> Destino definido</h2>
-          {!loading && !destination && <p className="text-xs text-slate-500">A destinação ainda não foi autorizada no processo.</p>}
+          <h2 className="flex items-center gap-2 font-semibold mb-3">
+            <ShieldCheck className="w-4 h-4 text-brand" /> Destino definido
+          </h2>
+          {!loading && !destination && (
+            <p className="text-xs text-slate-500">
+              A destinação ainda não foi autorizada no processo.
+            </p>
+          )}
           {destination && (
             <div className="grid gap-2 text-sm">
-              <Row k="Destino">{destination.destination_type === "segunda_vida" ? "Segunda vida" : "Reciclagem"}</Row>
+              <Row k="Destino">
+                {destination.destination_type === "segunda_vida" ? "Segunda vida" : "Reciclagem"}
+              </Row>
               <Row k="Lote">{destination.lot_code}</Row>
-              <Row k="Local">{[destination.city, destination.state].filter(Boolean).join("/") || "Destinador autorizado"}</Row>
-              <Row k="Operação">{destination.operation_status ? workflowLabel(destination.operation_status) : "Em preparação"}</Row>
+              <Row k="Local">
+                {[destination.city, destination.state].filter(Boolean).join("/") ||
+                  "Destinador autorizado"}
+              </Row>
+              <Row k="Operação">
+                {destination.operation_status
+                  ? workflowLabel(destination.operation_status)
+                  : "Em preparação"}
+              </Row>
             </div>
           )}
           <div className="mt-3 p-2 rounded bg-slate-500/10 text-[10px] text-slate-400">
-            Informações comerciais, propostas, valores e identidade de recicladoras permanecem protegidos neste painel.
+            Informações comerciais, propostas, valores e identidade de recicladoras permanecem
+            protegidos neste painel.
           </div>
         </section>
 
         <section className="p-4 border border-white/10 rounded-md">
-          <h2 className="flex items-center gap-2 font-semibold mb-3"><FileText className="w-4 h-4 text-brand" /> Documentos finais</h2>
-          {!loading && documents.length === 0 && <p className="text-xs text-slate-500">Documentos serão liberados na etapa de documentação final.</p>}
+          <h2 className="flex items-center gap-2 font-semibold mb-3">
+            <FileText className="w-4 h-4 text-brand" /> Documentos finais
+          </h2>
+          {!loading && documents.length === 0 && (
+            <p className="text-xs text-slate-500">
+              Documentos serão liberados na etapa de documentação final.
+            </p>
+          )}
           <div className="grid gap-2">
             {documents.map((document) => (
               <button
                 key={document.id}
                 disabled={!document.storage_path}
-                onClick={() => void openPrivateFile("workflow-documents", document.storage_path)}
+                onClick={() => void openWorkflowDocument(document.id)}
                 className="flex items-center justify-between gap-3 p-2 rounded bg-white/5 text-left text-xs disabled:opacity-50"
               >
-                <span><span className="text-brand">{workflowLabel(document.type)}</span>{document.number ? ` · ${document.number}` : ""}</span>
+                <span>
+                  <span className="text-brand">{workflowLabel(document.type)}</span>
+                  {document.number ? ` · ${document.number}` : ""}
+                </span>
                 <StatusBadge status={document.status ?? "pendente"} />
               </button>
             ))}
@@ -639,12 +932,14 @@ function BatteryDetailPage({
 
       <section className="p-4 border border-white/10 rounded-md mb-4">
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h2 className="flex items-center gap-2 font-semibold"><Paperclip className="w-4 h-4 text-brand" /> Fotos e arquivos</h2>
+          <h2 className="flex items-center gap-2 font-semibold">
+            <Paperclip className="w-4 h-4 text-brand" /> Fotos e arquivos
+          </h2>
           <label className="inline-flex items-center gap-1.5 px-3 py-2 border border-white/10 rounded-md text-xs cursor-pointer hover:bg-white/5">
             <Upload className="w-3.5 h-3.5" /> {uploading ? "Enviando..." : "Anexar"}
             <input
               type="file"
-              accept="image/jpeg,image/png,image/webp,application/pdf,text/plain"
+              accept="image/jpeg,image/png,image/webp,application/pdf,text/csv,.doc,.docx,.xls,.xlsx"
               className="hidden"
               disabled={uploading}
               onChange={(event) => {
@@ -655,16 +950,37 @@ function BatteryDetailPage({
             />
           </label>
         </div>
-        {files.length === 0 ? <p className="text-xs text-slate-500">Nenhuma foto ou arquivo anexado.</p> : (
+        {files.length === 0 ? (
+          <p className="text-xs text-slate-500">Nenhuma foto ou arquivo anexado.</p>
+        ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {files.map((file) => (
-              <button key={file.id} onClick={() => void openPrivateFile("battery-files", file.storage_path)} className="overflow-hidden rounded border border-white/10 bg-white/5 text-left">
+              <button
+                key={file.id}
+                onClick={() =>
+                  void openPrivateFile(file.bucket_id ?? "battery-files", file.storage_path)
+                }
+                className="overflow-hidden rounded border border-white/10 bg-white/5 text-left"
+              >
                 {file.tipo.startsWith("foto") && file.signedUrl ? (
-                  <img src={file.signedUrl} alt={file.nome_arquivo} className="w-full h-28 object-cover" />
+                  <img
+                    src={file.signedUrl}
+                    alt={file.nome_arquivo}
+                    className="w-full h-28 object-cover"
+                  />
                 ) : (
-                  <div className="h-28 grid place-items-center"><FileText className="w-8 h-8 text-slate-500" /></div>
+                  <div className="h-28 grid place-items-center">
+                    <FileText className="w-8 h-8 text-slate-500" />
+                  </div>
                 )}
-                <div className="p-2 text-[10px] truncate flex items-center gap-1">{file.tipo.startsWith("foto") ? <ImageIcon className="w-3 h-3" /> : <Paperclip className="w-3 h-3" />}{file.nome_arquivo}</div>
+                <div className="p-2 text-[10px] truncate flex items-center gap-1">
+                  {file.tipo.startsWith("foto") ? (
+                    <ImageIcon className="w-3 h-3" />
+                  ) : (
+                    <Paperclip className="w-3 h-3" />
+                  )}
+                  {file.nome_arquivo}
+                </div>
               </button>
             ))}
           </div>
@@ -678,9 +994,13 @@ function BatteryDetailPage({
           {events.map((event) => (
             <li key={event.id} className="relative">
               <span className="absolute -left-[21px] top-1 w-2 h-2 rounded-full bg-brand" />
-              <div className="text-sm font-semibold">{batteryStatusLabels[event.event_type] ?? workflowLabel(event.event_type)}</div>
+              <div className="text-sm font-semibold">
+                {batteryStatusLabels[event.event_type] ?? workflowLabel(event.event_type)}
+              </div>
               {event.notes && <div className="text-xs text-slate-400">{event.notes}</div>}
-              <div className="text-[10px] text-slate-500 font-mono">{new Date(event.created_at).toLocaleString("pt-BR")}</div>
+              <div className="text-[10px] text-slate-500 font-mono">
+                {new Date(event.created_at).toLocaleString("pt-BR")}
+              </div>
             </li>
           ))}
         </ol>
@@ -689,13 +1009,29 @@ function BatteryDetailPage({
   );
 }
 
-export function Modal({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
+export function Modal({
+  children,
+  onClose,
+  title,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+  title: string;
+}) {
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-industrial border border-white/10 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-industrial border border-white/10 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 sticky top-0 bg-industrial z-10">
           <h2 className="font-display font-bold text-lg">{title}</h2>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded">
+            <X className="w-4 h-4" />
+          </button>
         </div>
         <div className="p-6">{children}</div>
       </div>
@@ -704,29 +1040,57 @@ export function Modal({ children, onClose, title }: { children: React.ReactNode;
 }
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
-  return <div className="grid grid-cols-[140px_1fr] gap-2"><span className="text-slate-400 text-xs">{k}</span><span>{children}</span></div>;
+  return (
+    <div className="grid grid-cols-[140px_1fr] gap-2">
+      <span className="text-slate-400 text-xs">{k}</span>
+      <span>{children}</span>
+    </div>
+  );
 }
 
 export function Inp(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   const { label, ...rest } = props;
   return (
     <label className="grid gap-1">
-      <span className="text-xs text-slate-400">{label}{rest.required && " *"}</span>
+      <span className="text-xs text-slate-400">
+        {label}
+        {rest.required && " *"}
+      </span>
       <input {...rest} className="px-3 py-2 bg-white/5 border border-white/10 rounded-md" />
     </label>
   );
 }
 
-export function Sel({ label, options, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement> & { label: string; options: (string | { value: string; label: string })[] }) {
+export function Sel({
+  label,
+  options,
+  ...rest
+}: React.SelectHTMLAttributes<HTMLSelectElement> & {
+  label: string;
+  options: (string | { value: string; label: string })[];
+}) {
   return (
     <label className="grid gap-1">
-      <span className="text-xs text-slate-400">{label}{rest.required && " *"}</span>
-      <select {...rest} className="px-3 py-2 bg-white/5 border border-white/10 rounded-md" defaultValue={rest.defaultValue ?? ""}>
-        <option value="" disabled>Selecione...</option>
+      <span className="text-xs text-slate-400">
+        {label}
+        {rest.required && " *"}
+      </span>
+      <select
+        {...rest}
+        className="px-3 py-2 bg-white/5 border border-white/10 rounded-md"
+        defaultValue={rest.defaultValue ?? ""}
+      >
+        <option value="" disabled>
+          Selecione...
+        </option>
         {options.map((o) => {
           const v = typeof o === "string" ? o : o.value;
           const l = typeof o === "string" ? o : o.label;
-          return <option key={v} value={v}>{l}</option>;
+          return (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          );
         })}
       </select>
     </label>

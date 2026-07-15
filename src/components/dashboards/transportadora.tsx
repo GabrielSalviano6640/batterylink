@@ -15,6 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Inp, Modal, Sel, StatusBadge } from "./gerador";
+import { uploadPrivateDocument } from "@/lib/private-documents";
 import { workflowRpc } from "@/lib/workflow";
 
 type Collection = Tables<"collections">;
@@ -273,7 +274,6 @@ export function TransportadoraDashboard({ userId }: { userId: string }) {
       {documentItem && (
         <CollectionDocumentModal
           collection={documentItem}
-          userId={userId}
           onClose={() => setDocumentItem(null)}
           onSaved={() => {
             setDocumentItem(null);
@@ -293,7 +293,7 @@ export function TransportadoraDashboard({ userId }: { userId: string }) {
       )}
       {showOrgDocument && (
         <OrganizationDocumentModal
-          userId={userId}
+          organizationId={summary.organization_id}
           onClose={() => setShowOrgDocument(false)}
           onSaved={() => {
             setShowOrgDocument(false);
@@ -491,22 +491,12 @@ function ScheduleModal({
   );
 }
 
-async function uploadWorkflowFile(userId: string, scope: string, file: File) {
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-  const path = `${userId}/${scope}/${Date.now()}-${safeName}`;
-  const { error } = await supabase.storage.from("workflow-documents").upload(path, file);
-  if (error) throw error;
-  return path;
-}
-
 function CollectionDocumentModal({
   collection,
-  userId,
   onClose,
   onSaved,
 }: {
   collection: Collection;
-  userId: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -518,14 +508,7 @@ function CollectionDocumentModal({
     if (!(file instanceof File) || !file.size) return;
     setSaving(true);
     try {
-      const path = await uploadWorkflowFile(userId, `collections/${collection.id}`, file);
-      await workflowRpc("register_collection_document", {
-        _collection_id: collection.id,
-        _document_type: String(fd.get("tipo")),
-        _storage_path: path,
-        _document_number: String(fd.get("numero") || "") || null,
-        _notes: String(fd.get("observacoes") || "") || null,
-      });
+      await uploadPrivateDocument("collection", collection.id, String(fd.get("tipo")), file);
       toast.success("Documento anexado");
       onSaved();
     } catch (err) {
@@ -614,11 +597,11 @@ function DocumentsPanel({ alerts, onUpload }: { alerts: DocumentAlert[]; onUploa
 }
 
 function OrganizationDocumentModal({
-  userId,
+  organizationId,
   onClose,
   onSaved,
 }: {
-  userId: string;
+  organizationId: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -628,12 +611,18 @@ function OrganizationDocumentModal({
     const fd = new FormData(e.currentTarget);
     const file = fd.get("arquivo");
     if (!(file instanceof File) || !file.size) return;
+    if (!organizationId) return toast.error("Organização da transportadora não encontrada");
     setSaving(true);
     try {
-      const path = await uploadWorkflowFile(userId, "carrier-documents", file);
+      const uploaded = await uploadPrivateDocument(
+        "organization",
+        organizationId,
+        String(fd.get("tipo")),
+        file,
+      );
       await workflowRpc("register_carrier_organization_document", {
         _document_type: String(fd.get("tipo")),
-        _storage_path: path,
+        _storage_path: uploaded?.path,
         _document_number: String(fd.get("numero") || "") || null,
         _valid_until: String(fd.get("validade") || "") || null,
         _notes: null,
