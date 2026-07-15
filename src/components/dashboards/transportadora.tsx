@@ -4,16 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { Truck } from "lucide-react";
 import { StatusBadge } from "./gerador";
+import { workflowRpc } from "@/lib/workflow";
 
 type Collection = Tables<"collections">;
-
-const nextStatus: Record<string, { next: Collection["status"]; label: string } | null> = {
-  available: { next: "accepted", label: "Aceitar coleta" },
-  accepted: { next: "in_transit", label: "Iniciar transporte" },
-  in_transit: { next: "delivered", label: "Confirmar entrega" },
-  delivered: null,
-  cancelled: null,
-};
 
 export function TransportadoraDashboard({ userId }: { userId: string }) {
   const [items, setItems] = useState<Collection[]>([]);
@@ -25,22 +18,33 @@ export function TransportadoraDashboard({ userId }: { userId: string }) {
   };
   useEffect(() => { void load(); }, []);
 
-  const filtered = items.filter((c) => tab === "available" ? c.status === "available" : c.transportadora_id === userId);
+  const filtered = items.filter((c) => tab === "available" ? c.status === "ordem_criada" : c.transportadora_id === userId);
 
-  const advance = async (c: Collection) => {
-    const step = nextStatus[c.status];
-    if (!step) return;
-    if (step.next === "delivered") {
-      const { error } = await supabase.rpc("deliver_collection", { _collection_id: c.id });
-      if (error) return toast.error(error.message);
-    } else {
-      const payload: Partial<Collection> = { status: step.next };
-      if (c.status === "available") payload.transportadora_id = userId;
-      const { error } = await supabase.from("collections").update(payload).eq("id", c.id);
-      if (error) return toast.error(error.message);
+  const run = async (name: string, args: Record<string, unknown>, message: string) => {
+    try {
+      await workflowRpc(name, args);
+      toast.success(message);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao atualizar coleta");
     }
-    toast.success(`Coleta atualizada: ${step.label}`);
-    void load();
+  };
+
+  const schedule = async (c: Collection) => {
+    const value = window.prompt("Data e hora da coleta (AAAA-MM-DD HH:mm):");
+    if (!value) return;
+    const when = new Date(value.replace(" ", "T"));
+    if (Number.isNaN(when.getTime())) return toast.error("Data inválida");
+    const vehicle = window.prompt("Veículo:") ?? "";
+    const plate = window.prompt("Placa:") ?? "";
+    const driver = window.prompt("Motorista:") ?? "";
+    await run("schedule_collection", {
+      _collection_id: c.id,
+      _scheduled_at: when.toISOString(),
+      _vehicle: vehicle || null,
+      _plate: plate || null,
+      _driver: driver || null,
+    }, "Coleta agendada");
   };
 
   return (
@@ -62,7 +66,6 @@ export function TransportadoraDashboard({ userId }: { userId: string }) {
       <div className="grid gap-3">
         {filtered.length === 0 && <p className="text-sm text-slate-500">Nenhuma coleta.</p>}
         {filtered.map((c) => {
-          const step = nextStatus[c.status];
           return (
             <div key={c.id} className="p-4 border border-white/10 rounded-md">
               <div className="flex justify-between items-start mb-2">
@@ -73,11 +76,49 @@ export function TransportadoraDashboard({ userId }: { userId: string }) {
                 </div>
                 <StatusBadge status={c.status} />
               </div>
-              {step && (
-                <button onClick={() => advance(c)} className="mt-2 px-3 py-1.5 bg-brand text-industrial rounded-md text-xs font-semibold">
-                  {step.label}
-                </button>
-              )}
+              <div className="flex flex-wrap gap-2 mt-3">
+                {c.status === "ordem_criada" && (
+                  <>
+                    <button
+                      onClick={() => void run("respond_collection_order", {
+                        _collection_id: c.id, _accept: true, _reason: "Ordem aceita pela transportadora", _carrier_organization_id: null,
+                      }, "Ordem aceita")}
+                      className="px-3 py-1.5 bg-brand text-industrial rounded-md text-xs font-semibold"
+                    >
+                      Aceitar
+                    </button>
+                    <button
+                      onClick={() => {
+                        const reason = window.prompt("Motivo da recusa:") ?? "Ordem recusada";
+                        void run("respond_collection_order", {
+                          _collection_id: c.id, _accept: false, _reason: reason, _carrier_organization_id: null,
+                        }, "Ordem recusada");
+                      }}
+                      className="px-3 py-1.5 border border-danger/40 text-danger rounded-md text-xs"
+                    >
+                      Recusar
+                    </button>
+                  </>
+                )}
+                {c.status === "aceita" && (
+                  <button onClick={() => void schedule(c)} className="px-3 py-1.5 bg-brand text-industrial rounded-md text-xs font-semibold">Agendar coleta</button>
+                )}
+                {c.status === "agendada" && (
+                  <button onClick={() => void run("advance_collection", {
+                    _collection_id: c.id, _action: "confirmar_retirada", _reason: "Material retirado na origem",
+                  }, "Retirada confirmada")} className="px-3 py-1.5 bg-brand text-industrial rounded-md text-xs font-semibold">Confirmar retirada</button>
+                )}
+                {c.status === "retirada" && (
+                  <button onClick={() => void run("advance_collection", {
+                    _collection_id: c.id, _action: "iniciar_transporte", _reason: "Transporte iniciado",
+                  }, "Transporte iniciado")} className="px-3 py-1.5 bg-brand text-industrial rounded-md text-xs font-semibold">Iniciar transporte</button>
+                )}
+                {c.status === "em_transporte" && (
+                  <button onClick={() => void run("advance_collection", {
+                    _collection_id: c.id, _action: "confirmar_entrega", _reason: "Entrega realizada",
+                  }, "Entrega confirmada")} className="px-3 py-1.5 bg-brand text-industrial rounded-md text-xs font-semibold">Confirmar entrega</button>
+                )}
+              </div>
             </div>
           );
         })}
