@@ -944,6 +944,7 @@ function OperationDocumentModal({
     try {
       const type = String(fd.get("type"));
       const uploaded = await uploadPrivateDocument("operation", operation.id, type, file);
+      if (!uploaded) throw new Error("Falha ao anexar documento.");
       if (type === "cdf") {
         await workflowRpc("register_regulatory_document_metadata", {
           _private_document_id: uploaded.id,

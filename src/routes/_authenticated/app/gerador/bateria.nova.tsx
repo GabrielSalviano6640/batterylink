@@ -3,7 +3,15 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { maskPhone, maskCEP, onlyDigits, isValidCEP, isValidPhone, isValidUF, BRAZILIAN_UFS } from "@/lib/masks";
+import {
+  maskPhone,
+  maskCEP,
+  onlyDigits,
+  isValidCEP,
+  isValidPhone,
+  isValidUF,
+  BRAZILIAN_UFS,
+} from "@/lib/masks";
 import { Upload, X } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/app/gerador/bateria/nova")({
@@ -53,13 +61,15 @@ function NovaBateria() {
 
     try {
       if (!auth.user?.id) throw new Error("Usuário não autenticado.");
-      
+      const userId = auth.user.id;
+
       // Validar campos obrigatórios
       if (!origem.trim()) throw new Error("Informe a origem da bateria.");
       if (!fabricante.trim()) throw new Error("Informe o fabricante.");
       if (!modelo.trim()) throw new Error("Informe o modelo.");
       if (!numeroSerie.trim()) throw new Error("Informe o número de série.");
-      if (!quantidade || parseInt(quantidade) < 1) throw new Error("Informe uma quantidade válida.");
+      if (!quantidade || parseInt(quantidade) < 1)
+        throw new Error("Informe uma quantidade válida.");
       if (!isValidCEP(cepOrigem)) throw new Error("Informe um CEP válido com oito dígitos.");
       if (!cidadeOrigem.trim()) throw new Error("Informe a cidade de origem.");
       if (!isValidUF(estadoOrigem)) throw new Error("Informe uma UF válida.");
@@ -69,7 +79,7 @@ function NovaBateria() {
       const { data: companies } = await supabase
         .from("companies")
         .select("id")
-        .eq("owner_id", auth.user.id)
+        .eq("owner_id", userId)
         .limit(1)
         .single();
 
@@ -89,22 +99,22 @@ function NovaBateria() {
           quantidade: parseInt(quantidade),
           peso_kg: pesoKg ? parseFloat(pesoKg) : null,
           soh_percentual: sohPercentual ? parseFloat(sohPercentual) : null,
-          estado_aparente: estadoAparente,
+          estado: estadoAparente,
           possui_vazamento: possuiVazamento,
           possui_avaria: possuiAvaria,
           possui_risco_termico: possuiRiscoTermico,
           urgencia,
-          cep_origem: onlyDigits(cepOrigem),
-          cidade_origem: cidadeOrigem.trim(),
-          estado_origem: estadoOrigem.toUpperCase(),
-          endereco_coleta: enderecoColeta.trim(),
+          cep: onlyDigits(cepOrigem),
+          cidade: cidadeOrigem.trim(),
+          uf: estadoOrigem.toUpperCase(),
+          endereco: enderecoColeta.trim(),
           observacoes: observacoes.trim(),
           status: "cadastrada",
-          created_by: auth.user.id,
-          generator_organization_id: companies.id,
-          owner_id: auth.user.id,
+          created_by: userId,
+          company_id: companies.id,
+          owner_id: userId,
         })
-        .select("id, codigo_unico, tracking_token, qr_code_data")
+        .select("id, code, tracking_token, qr_code_data")
         .single();
 
       if (batteryError) throw batteryError;
@@ -128,7 +138,7 @@ function NovaBateria() {
             storage_path: f.path,
             nome_arquivo: f.name,
             tipo: "foto",
-            uploaded_by: auth.user.id,
+            uploaded_by: userId,
           })),
         );
         if (filesError) throw filesError;
@@ -138,11 +148,11 @@ function NovaBateria() {
       await supabase.from("battery_events").insert({
         battery_id: battery.id,
         event_type: "cadastrada",
-        actor_id: auth.user.id,
+        actor_id: userId,
         notes: `Bateria cadastrada: ${fabricante} ${modelo}`,
       });
 
-      toast.success(`Bateria cadastrada! Código: ${battery.codigo_unico}`);
+      toast.success(`Bateria cadastrada! Código: ${battery.code}`);
       navigate({ to: "/app/gerador", replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao cadastrar bateria.");
@@ -156,13 +166,17 @@ function NovaBateria() {
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-display font-bold mb-2">Cadastrar nova bateria</h1>
-          <p className="text-slate-400 text-sm">Informe os dados técnicos e de localização para iniciar o rastreamento.</p>
+          <p className="text-slate-400 text-sm">
+            Informe os dados técnicos e de localização para iniciar o rastreamento.
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Seção 1: Identificação */}
           <section className="bg-white/5 border border-white/10 rounded-lg p-6">
-            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">Identificação</h2>
+            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">
+              Identificação
+            </h2>
             <div className="grid md:grid-cols-2 gap-4">
               <label className="block text-xs text-slate-300">
                 Origem *
@@ -212,7 +226,9 @@ function NovaBateria() {
 
           {/* Seção 2: Especificações técnicas */}
           <section className="bg-white/5 border border-white/10 rounded-lg p-6">
-            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">Especificações técnicas</h2>
+            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">
+              Especificações técnicas
+            </h2>
             <div className="grid md:grid-cols-3 gap-4 mb-4">
               <label className="block text-xs text-slate-300">
                 Química *
@@ -295,7 +311,9 @@ function NovaBateria() {
 
           {/* Seção 3: Estado e riscos */}
           <section className="bg-white/5 border border-white/10 rounded-lg p-6">
-            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">Estado e riscos</h2>
+            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">
+              Estado e riscos
+            </h2>
             <div className="grid md:grid-cols-2 gap-6 mb-4">
               <label className="block text-xs text-slate-300">
                 Estado aparente
@@ -356,7 +374,9 @@ function NovaBateria() {
 
           {/* Seção 4: Localização */}
           <section className="bg-white/5 border border-white/10 rounded-lg p-6">
-            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">Localização</h2>
+            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">
+              Localização
+            </h2>
             <div className="grid md:grid-cols-3 gap-4 mb-4">
               <label className="block text-xs text-slate-300">
                 CEP *
@@ -411,14 +431,18 @@ function NovaBateria() {
 
           {/* Seção 5: Fotos e observações */}
           <section className="bg-white/5 border border-white/10 rounded-lg p-6">
-            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">Documentação</h2>
+            <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">
+              Documentação
+            </h2>
             <label className="block text-xs text-slate-300 mb-4">
               Fotos (opcional)
               <div className="mt-2 flex items-center justify-center w-full">
                 <label className="relative w-full flex flex-col items-center justify-center border-2 border-dashed border-white/20 rounded-lg p-6 cursor-pointer hover:border-brand/50 transition">
                   <div className="flex flex-col items-center justify-center">
                     <Upload className="w-6 h-6 text-slate-400 mb-2" />
-                    <p className="text-sm text-slate-400">Arraste fotos ou clique para selecionar</p>
+                    <p className="text-sm text-slate-400">
+                      Arraste fotos ou clique para selecionar
+                    </p>
                   </div>
                   <input
                     type="file"
@@ -433,12 +457,18 @@ function NovaBateria() {
 
             {fotos.length > 0 && (
               <div className="mb-4">
-                <p className="text-xs text-slate-400 mb-2">{fotos.length} foto(s) selecionada(s):</p>
+                <p className="text-xs text-slate-400 mb-2">
+                  {fotos.length} foto(s) selecionada(s):
+                </p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   {fotos.map((foto, i) => (
                     <div key={i} className="relative">
                       <div className="aspect-square bg-white/10 rounded-md flex items-center justify-center overflow-hidden">
-                        <img src={URL.createObjectURL(foto)} alt={foto.name} className="w-full h-full object-cover" />
+                        <img
+                          src={URL.createObjectURL(foto)}
+                          alt={foto.name}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
                       <button
                         type="button"

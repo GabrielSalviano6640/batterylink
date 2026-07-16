@@ -609,7 +609,7 @@ function NewBatteryModal({
         uf: String(fd.get("uf") || "") || null,
         endereco: String(fd.get("endereco") || "") || null,
         observacoes: String(fd.get("observacoes") || "") || null,
-        status: "cadastrada",
+        status: "cadastrada" as const,
       };
       const { data, error } = await supabase.from("batteries").insert(payload).select().single();
       if (error) throw error;

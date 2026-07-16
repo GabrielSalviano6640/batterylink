@@ -49,7 +49,7 @@ function GeradorDashboard() {
       const { data: allBatteries, count } = await supabase
         .from("batteries")
         .select("*", { count: "exact" })
-        .eq("generator_organization_id", company.id)
+        .eq("company_id", company.id)
         .order("created_at", { ascending: false })
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -59,11 +59,13 @@ function GeradorDashboard() {
       const { data: statsData } = await supabase
         .from("batteries")
         .select("status")
-        .eq("generator_organization_id", company.id);
+        .eq("company_id", company.id);
 
       const stats = statsData || [];
       setTotalCadastradas(stats.length);
-      setTotalColetas(stats.filter((b) => ["coleta_agendada", "em_transporte"].includes(b.status)).length);
+      setTotalColetas(
+        stats.filter((b) => ["coleta_agendada", "em_transporte"].includes(b.status)).length,
+      );
       setTotalConcluidas(stats.filter((b) => b.status === "concluida").length);
     } catch (error) {
       console.error(error);
@@ -95,7 +97,11 @@ function GeradorDashboard() {
 
   const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
     cadastrada: { bg: "bg-blue-500/10", text: "text-blue-300", label: "Cadastrada" },
-    aguardando_analise: { bg: "bg-yellow-500/10", text: "text-yellow-300", label: "Aguardando análise" },
+    aguardando_analise: {
+      bg: "bg-yellow-500/10",
+      text: "text-yellow-300",
+      label: "Aguardando análise",
+    },
     coleta_agendada: { bg: "bg-amber-500/10", text: "text-amber-300", label: "Coleta agendada" },
     em_transporte: { bg: "bg-orange-500/10", text: "text-orange-300", label: "Em transporte" },
     recebida_na_triagem: { bg: "bg-purple-500/10", text: "text-purple-300", label: "Triagem" },
@@ -110,7 +116,9 @@ function GeradorDashboard() {
       <div className="flex justify-between items-start mb-8">
         <div>
           <h1 className="text-3xl font-display font-bold mb-2">Painel do Gerador</h1>
-          <p className="text-slate-400 text-sm">Acompanhe suas baterias e operações em tempo real.</p>
+          <p className="text-slate-400 text-sm">
+            Acompanhe suas baterias e operações em tempo real.
+          </p>
         </div>
         <Link
           to="/app/gerador/bateria/nova"
@@ -188,7 +196,9 @@ function GeradorDashboard() {
             <thead className="border-b border-white/10 bg-white/[0.02]">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-slate-300">Código</th>
-                <th className="px-4 py-3 text-left font-semibold text-slate-300">Fabricante / Modelo</th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-300">
+                  Fabricante / Modelo
+                </th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-300">Química</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-300">SoH</th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-300">Status</th>
@@ -211,18 +221,24 @@ function GeradorDashboard() {
                 </tr>
               ) : (
                 batteries.map((battery) => {
-                  const statusStyle = statusStyles[battery.status as keyof typeof statusStyles] || statusStyles.cadastrada;
+                  const statusStyle =
+                    statusStyles[battery.status as keyof typeof statusStyles] ||
+                    statusStyles.cadastrada;
                   return (
                     <tr key={battery.id} className="hover:bg-white/[0.02] transition">
-                      <td className="px-4 py-3 font-mono text-xs text-brand">{battery.codigo_unico}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-brand">{battery.code}</td>
                       <td className="px-4 py-3 text-xs">
                         <div>{battery.fabricante}</div>
                         <div className="text-slate-400">{battery.modelo}</div>
                       </td>
-                      <td className="px-4 py-3 text-xs uppercase font-semibold">{battery.quimica}</td>
+                      <td className="px-4 py-3 text-xs uppercase font-semibold">
+                        {battery.quimica}
+                      </td>
                       <td className="px-4 py-3 text-xs">{battery.soh_percentual ?? "—"}%</td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold ${statusStyle.bg} ${statusStyle.text}`}>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold ${statusStyle.bg} ${statusStyle.text}`}
+                        >
                           {statusStyle.label}
                         </span>
                       </td>
@@ -231,7 +247,8 @@ function GeradorDashboard() {
                       </td>
                       <td className="px-4 py-3 flex justify-center gap-2">
                         <Link
-                          to={`/app/gerador/bateria/${battery.id}`}
+                          to="/app/gerador/bateria/$batteryId"
+                          params={{ batteryId: battery.id }}
                           className="p-1.5 hover:bg-brand/20 rounded transition"
                           title="Ver detalhes"
                         >

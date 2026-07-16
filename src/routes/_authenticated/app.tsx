@@ -18,7 +18,7 @@ import {
   LogOut,
   Clock,
 } from "lucide-react";
-import { maskCNPJ, maskPhone, maskCEP } from "@/lib/masks";
+import { maskCNPJ, maskPhone, maskCEP, onlyDigits } from "@/lib/masks";
 import { isValidCEP, isValidCNPJ, isValidPhone } from "@/lib/masks";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,13 +30,23 @@ export const Route = createFileRoute("/_authenticated/app")({
   component: AppHub,
 });
 
+function getSubmitErrorMessage(err: unknown) {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  if (typeof err === "string" && err.trim()) return err;
+  return "Erro ao enviar solicitação.";
+}
+
 function AppHub() {
   const auth = useAuth();
   const navigate = useNavigate();
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    navigate({ to: "/auth" });
+    navigate({ to: "/auth", search: { mode: undefined } });
   };
 
   if (auth.loading) {
@@ -211,7 +221,10 @@ function OnboardingForm({ onSubmitted }: { onSubmitted: () => Promise<void> }) {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Sessão expirada. Entre novamente.");
       const uid = user.user.id;
-      await supabase.from("profiles").upsert(
+      const cnpjDigits = onlyDigits(cnpj);
+      const cepDigits = onlyDigits(cep);
+
+      const { error: profileError } = await supabase.from("profiles").upsert(
         {
           id: uid,
           phone,
@@ -219,35 +232,44 @@ function OnboardingForm({ onSubmitted }: { onSubmitted: () => Promise<void> }) {
         },
         { onConflict: "id" },
       );
-      await supabase.from("companies").upsert(
+      if (profileError) throw profileError;
+
+      const { error: companyError } = await supabase.from("companies").upsert(
         {
           owner_id: uid,
           razao_social: razao,
-          cnpj,
+          cnpj: cnpjDigits,
+          cnpj_cpf: cnpjDigits,
           tipo: selectedRoles[0],
           tipo_organizacao: tipoOrg,
           cargo,
           endereco,
           cidade,
           estado,
-          cep,
+          cep: cepDigits,
+          telefone: phone,
           status: "aguardando_aprovacao",
+          status_aprovacao: "aguardando_aprovacao",
         },
         { onConflict: "owner_id,cnpj" },
       );
+      if (companyError) throw companyError;
+
       const rows = selectedRoles.map((r) => ({
         user_id: uid,
         requested_role: r,
         company_data: {
           razao_social: razao,
-          cnpj,
+          cnpj: cnpjDigits,
+          cnpj_cpf: cnpjDigits,
           tipo_organizacao: tipoOrg,
           cargo,
           endereco,
           cidade,
           estado,
-          cep,
+          cep: cepDigits,
           phone,
+          telefone: phone,
         },
       }));
       const { error } = await supabase.from("registration_requests").insert(rows);
@@ -259,7 +281,7 @@ function OnboardingForm({ onSubmitted }: { onSubmitted: () => Promise<void> }) {
       );
       await onSubmitted();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar solicitação.");
+      toast.error(getSubmitErrorMessage(err));
     } finally {
       setLoading(false);
     }

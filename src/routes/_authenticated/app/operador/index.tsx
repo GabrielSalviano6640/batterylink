@@ -8,9 +8,8 @@ import { Filter, Download, Eye, MoreVertical, Plus, Check, SkipForward } from "l
 import type { Database } from "@/integrations/supabase/types";
 
 type Battery = Database["public"]["Tables"]["batteries"]["Row"];
-type BatteryWithProposal = Battery & {
-  battery_proposals?: { id: string; valor_unitario: number; proposta_id: string }[];
-};
+type BatteryStatus = Database["public"]["Enums"]["battery_status"];
+type BatteryWithProposal = Battery;
 
 export const Route = createFileRoute("/_authenticated/app/operador/")({
   component: OperadorDashboard,
@@ -19,7 +18,7 @@ export const Route = createFileRoute("/_authenticated/app/operador/")({
 function OperadorDashboard() {
   const auth = useAuth();
   const [batteries, setBatteries] = useState<BatteryWithProposal[]>([]);
-  const [filtroStatus, setFiltroStatus] = useState<string>("em_triagem");
+  const [filtroStatus, setFiltroStatus] = useState<BatteryStatus | "">("recebida_na_triagem");
   const [filtroQuimica, setFiltroQuimica] = useState<string>("");
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -27,10 +26,18 @@ function OperadorDashboard() {
   const [showTriageModal, setShowTriageModal] = useState(false);
 
   const statusOptions = [
-    { value: "em_triagem", label: "Em triagem", color: "bg-amber-500/20 text-amber-300" },
-    { value: "lote_formado", label: "Lote formado", color: "bg-blue-500/20 text-blue-300" },
-    { value: "diagnostico_concluido", label: "Diagnóstico concluído", color: "bg-cyan-500/20 text-cyan-300" },
-    { value: "proposta_enviada", label: "Proposta enviada", color: "bg-purple-500/20 text-purple-300" },
+    { value: "recebida_na_triagem", label: "Em triagem", color: "bg-amber-500/20 text-amber-300" },
+    { value: "em_lote", label: "Lote formado", color: "bg-blue-500/20 text-blue-300" },
+    {
+      value: "classificada",
+      label: "Diagnóstico concluído",
+      color: "bg-cyan-500/20 text-cyan-300",
+    },
+    {
+      value: "em_negociacao",
+      label: "Proposta enviada",
+      color: "bg-purple-500/20 text-purple-300",
+    },
   ];
 
   const chemistryOptions = [
@@ -48,26 +55,23 @@ function OperadorDashboard() {
       setLoading(true);
 
       try {
-        // Find operator's organization
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("operador_organization_id")
-          .eq("id", auth.user.id)
+        const { data: company } = await supabase
+          .from("companies")
+          .select("id")
+          .eq("owner_id", auth.user.id)
+          .eq("tipo", "operador")
           .limit(1)
           .single();
 
-        if (!profile?.operador_organization_id) {
+        if (!company?.id) {
           toast.error("Operador não vinculado a nenhuma organização.");
           return;
         }
 
-        // Fetch batteries in triage
         let query = supabase
           .from("batteries")
-          .select(
-            "*, battery_proposals(id, valor_unitario, proposta_id) as battery_proposals"
-          )
-          .eq("operador_organization_id", profile.operador_organization_id);
+          .select("*")
+          .eq("operator_organization_id", company.id);
 
         if (filtroStatus) query = query.eq("status", filtroStatus);
         if (filtroQuimica) query = query.eq("quimica", filtroQuimica);
@@ -75,7 +79,9 @@ function OperadorDashboard() {
         const from = page * 10;
         const to = from + 10 - 1;
 
-        const { data, error } = await query.range(from, to).order("created_at", { ascending: false });
+        const { data, error } = await query
+          .range(from, to)
+          .order("created_at", { ascending: false });
 
         if (error) throw error;
         setBatteries(data || []);
@@ -90,7 +96,7 @@ function OperadorDashboard() {
     void load();
   }, [auth?.user?.id, filtroStatus, filtroQuimica, page]);
 
-  const handleAdvanceStatus = async (battery: BatteryWithProposal, newStatus: string) => {
+  const handleAdvanceStatus = async (battery: BatteryWithProposal, newStatus: BatteryStatus) => {
     try {
       const { error } = await supabase
         .from("batteries")
@@ -119,13 +125,15 @@ function OperadorDashboard() {
     try {
       const { error } = await supabase
         .from("batteries")
-        .update({ status: "proposta_enviada" })
+        .update({ status: "em_negociacao" })
         .eq("id", battery.id);
 
       if (error) throw error;
 
       toast.success("Diagnostico pulado. Baterias enviadas para proposta.");
-      setBatteries(batteries.map((b) => (b.id === battery.id ? { ...b, status: "proposta_enviada" } : b)));
+      setBatteries(
+        batteries.map((b) => (b.id === battery.id ? { ...b, status: "em_negociacao" } : b)),
+      );
       setSelectedBattery(null);
     } catch (error) {
       console.error(error);
@@ -150,10 +158,22 @@ function OperadorDashboard() {
       {/* KPIs */}
       <div className="grid md:grid-cols-4 gap-4">
         {[
-          { label: "Em triagem", count: batteries.filter((b) => b.status === "em_triagem").length },
-          { label: "Lotes formados", count: batteries.filter((b) => b.status === "lote_formado").length },
-          { label: "Diagnóstico", count: batteries.filter((b) => b.status === "diagnostico_concluido").length },
-          { label: "Propostas", count: batteries.filter((b) => b.status === "proposta_enviada").length },
+          {
+            label: "Em triagem",
+            count: batteries.filter((b) => b.status === "recebida_na_triagem").length,
+          },
+          {
+            label: "Lotes formados",
+            count: batteries.filter((b) => b.status === "em_lote").length,
+          },
+          {
+            label: "Diagnóstico",
+            count: batteries.filter((b) => b.status === "classificada").length,
+          },
+          {
+            label: "Propostas",
+            count: batteries.filter((b) => b.status === "em_negociacao").length,
+          },
         ].map((kpi) => (
           <div
             key={kpi.label}
@@ -174,7 +194,7 @@ function OperadorDashboard() {
         <select
           value={filtroStatus}
           onChange={(e) => {
-            setFiltroStatus(e.target.value);
+            setFiltroStatus(e.target.value as BatteryStatus | "");
             setPage(0);
           }}
           className="px-3 py-1.5 bg-white/10 border border-white/20 rounded text-sm hover:bg-white/20 transition focus:outline-none focus:border-brand"
@@ -244,7 +264,7 @@ function OperadorDashboard() {
                       className="border-b border-white/5 hover:bg-white/[0.03] transition cursor-pointer"
                       onClick={() => setSelectedBattery(battery)}
                     >
-                      <td className="px-4 py-3 text-brand font-mono">{battery.codigo_unico}</td>
+                      <td className="px-4 py-3 text-brand font-mono">{battery.code}</td>
                       <td className="px-4 py-3">{battery.fabricante}</td>
                       <td className="px-4 py-3 text-xs">
                         <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded">
@@ -253,9 +273,12 @@ function OperadorDashboard() {
                       </td>
                       <td className="px-4 py-3">{battery.soh_percentual ?? "—"}%</td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          statusOptions.find((s) => s.value === battery.status)?.color || "bg-slate-500/20 text-slate-300"
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            statusOptions.find((s) => s.value === battery.status)?.color ||
+                            "bg-slate-500/20 text-slate-300"
+                          }`}
+                        >
                           {workflowLabel(battery.status)}
                         </span>
                       </td>
@@ -300,8 +323,10 @@ function OperadorDashboard() {
           {selectedBattery ? (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-semibold mb-2">{selectedBattery.fabricante} {selectedBattery.modelo}</h3>
-                <p className="text-xs text-slate-400">{selectedBattery.codigo_unico}</p>
+                <h3 className="text-sm font-semibold mb-2">
+                  {selectedBattery.fabricante} {selectedBattery.modelo}
+                </h3>
+                <p className="text-xs text-slate-400">{selectedBattery.code}</p>
               </div>
 
               <div className="space-y-2 text-sm">
@@ -341,10 +366,10 @@ function OperadorDashboard() {
               </div>
 
               <div className="space-y-2">
-                {selectedBattery.status === "em_triagem" && (
+                {selectedBattery.status === "recebida_na_triagem" && (
                   <>
                     <button
-                      onClick={() => handleAdvanceStatus(selectedBattery, "diagnostico_concluido")}
+                      onClick={() => handleAdvanceStatus(selectedBattery, "classificada")}
                       className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-brand hover:bg-brand/90 rounded font-semibold text-sm transition"
                     >
                       <Check className="w-4 h-4" />
@@ -359,9 +384,9 @@ function OperadorDashboard() {
                     </button>
                   </>
                 )}
-                {selectedBattery.status === "diagnostico_concluido" && (
+                {selectedBattery.status === "classificada" && (
                   <button
-                    onClick={() => handleAdvanceStatus(selectedBattery, "proposta_enviada")}
+                    onClick={() => handleAdvanceStatus(selectedBattery, "em_negociacao")}
                     className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-brand hover:bg-brand/90 rounded font-semibold text-sm transition"
                   >
                     <Check className="w-4 h-4" />

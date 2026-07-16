@@ -9,21 +9,26 @@ import type { Database } from "@/integrations/supabase/types";
 type RegistrationRequestRow = Database["public"]["Tables"]["registration_requests"]["Row"];
 
 type RegistrationRequest = Omit<RegistrationRequestRow, "company_data"> & {
-  company_data:
-    | {
-        razao_social?: string | null;
-        cnpj_cpf?: string | null;
-        tipo_organizacao?: string | null;
-        cargo?: string | null;
-        endereco?: string | null;
-        cidade?: string | null;
-        estado?: string | null;
-        cep?: string | null;
-        telefone?: string | null;
-        email?: string | null;
-      }
-    | null;
+  company_data: {
+    razao_social?: string | null;
+    cnpj_cpf?: string | null;
+    tipo_organizacao?: string | null;
+    cargo?: string | null;
+    endereco?: string | null;
+    cidade?: string | null;
+    estado?: string | null;
+    cep?: string | null;
+    telefone?: string | null;
+    email?: string | null;
+  } | null;
 };
+
+function normalizeCompanyData(
+  value: RegistrationRequestRow["company_data"],
+): RegistrationRequest["company_data"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as RegistrationRequest["company_data"];
+}
 
 export const Route = createFileRoute("/_authenticated/app/admin/pending-organizations")({
   component: PendingOrganizationsAdmin,
@@ -49,7 +54,12 @@ function PendingOrganizationsAdmin() {
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      setRequests(data || []);
+      setRequests(
+        (data || []).map((request) => ({
+          ...request,
+          company_data: normalizeCompanyData(request.company_data),
+        })),
+      );
     } catch (error) {
       console.error(error);
       toast.error("Erro ao carregar solicitações.");
@@ -110,9 +120,9 @@ function PendingOrganizationsAdmin() {
 
       // Criar notificação
       await supabase.from("notifications").insert({
-        profile_id: request.user_id,
-        titulo: "Organização aprovada",
-        mensagem: "Sua organização foi aprovada e você já pode começar a usar a plataforma.",
+        user_id: request.user_id,
+        title: "Organização aprovada",
+        body: "Sua organização foi aprovada e você já pode começar a usar a plataforma.",
         tipo: "approval",
         entity_type: "organization",
       });
@@ -159,9 +169,9 @@ function PendingOrganizationsAdmin() {
 
       // Criar notificação
       await supabase.from("notifications").insert({
-        profile_id: request.user_id,
-        titulo: "Organização rejeitada",
-        mensagem: `Sua solicitação foi rejeitada. Motivo: ${rejectionReason}`,
+        user_id: request.user_id,
+        title: "Organização rejeitada",
+        body: `Sua solicitação foi rejeitada. Motivo: ${rejectionReason}`,
         tipo: "rejection",
         entity_type: "organization",
       });
@@ -182,8 +192,12 @@ function PendingOrganizationsAdmin() {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-display font-bold mb-2">Organiza ções pendentes de aprovação</h1>
-        <p className="text-slate-400 text-sm">Revise e aprove ou rejeite as solicitações de novas organizações.</p>
+        <h1 className="text-3xl font-display font-bold mb-2">
+          Organiza ções pendentes de aprovação
+        </h1>
+        <p className="text-slate-400 text-sm">
+          Revise e aprove ou rejeite as solicitações de novas organizações.
+        </p>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
@@ -198,17 +212,23 @@ function PendingOrganizationsAdmin() {
             {loading ? (
               <div className="px-4 py-6 text-center text-slate-400 text-xs">Carregando...</div>
             ) : requests.length === 0 ? (
-              <div className="px-4 py-6 text-center text-slate-400 text-xs">Nenhuma solicitação pendente.</div>
+              <div className="px-4 py-6 text-center text-slate-400 text-xs">
+                Nenhuma solicitação pendente.
+              </div>
             ) : (
               requests.map((request) => (
                 <button
                   key={request.id}
                   onClick={() => setSelectedRequest(request.id)}
                   className={`w-full text-left px-4 py-3 transition ${
-                    selectedRequest === request.id ? "bg-brand/20 border-l-2 border-brand" : "hover:bg-white/5"
+                    selectedRequest === request.id
+                      ? "bg-brand/20 border-l-2 border-brand"
+                      : "hover:bg-white/5"
                   }`}
                 >
-                  <div className="text-sm font-semibold">{request.company_data?.razao_social || "—"}</div>
+                  <div className="text-sm font-semibold">
+                    {request.company_data?.razao_social || "—"}
+                  </div>
                   <div className="text-xs text-slate-400 mt-1">
                     {request.company_data?.cnpj_cpf || "—"}
                   </div>
@@ -227,12 +247,16 @@ function PendingOrganizationsAdmin() {
             <div className="space-y-6">
               {/* Dados da empresa */}
               <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-                <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">Dados da organização</h2>
+                <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">
+                  Dados da organização
+                </h2>
                 <div className="space-y-3 text-sm">
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-slate-400">Razão social</p>
-                      <p className="font-semibold">{selectedData.company_data?.razao_social || "—"}</p>
+                      <p className="font-semibold">
+                        {selectedData.company_data?.razao_social || "—"}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400">CNPJ/CPF</p>
@@ -240,11 +264,15 @@ function PendingOrganizationsAdmin() {
                     </div>
                     <div>
                       <p className="text-xs text-slate-400">Tipo</p>
-                      <p className="font-semibold">{selectedData.company_data?.tipo_organizacao || "—"}</p>
+                      <p className="font-semibold">
+                        {selectedData.company_data?.tipo_organizacao || "—"}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400">Perfil solicitado</p>
-                      <p className="font-semibold uppercase text-brand">{selectedData.requested_role}</p>
+                      <p className="font-semibold uppercase text-brand">
+                        {selectedData.requested_role}
+                      </p>
                     </div>
                   </div>
                   <div>
@@ -269,7 +297,9 @@ function PendingOrganizationsAdmin() {
               <div className="bg-white/5 border border-white/10 rounded-lg p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <FileText className="w-4 h-4 text-brand" />
-                  <h2 className="text-sm font-mono uppercase tracking-widest text-brand">Documentos</h2>
+                  <h2 className="text-sm font-mono uppercase tracking-widest text-brand">
+                    Documentos
+                  </h2>
                 </div>
                 <p className="text-xs text-slate-400">
                   Documentos de comprovação podem ser enviados após a aprovação inicial.
@@ -278,7 +308,9 @@ function PendingOrganizationsAdmin() {
 
               {/* Ações */}
               <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-                <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">Ação</h2>
+                <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">
+                  Ação
+                </h2>
 
                 <div className="space-y-4">
                   <div>

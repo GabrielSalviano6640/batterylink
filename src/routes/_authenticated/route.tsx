@@ -18,12 +18,12 @@ function AuthenticatedRoute() {
       try {
         const { data, error } = await supabase.auth.getUser();
         if (error || !data.user) {
-          if (mounted) navigate({ to: "/auth" });
+          if (mounted) navigate({ to: "/auth", search: { mode: undefined } });
           return;
         }
       } catch (error) {
         console.error(error);
-        if (mounted) navigate({ to: "/auth" });
+        if (mounted) navigate({ to: "/auth", search: { mode: undefined } });
         return;
       }
 

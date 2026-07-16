@@ -31,6 +31,7 @@ export function SiteNav() {
         </div>
         <Link
           to="/auth"
+          search={{ mode: undefined }}
           className="px-5 py-2 border border-brand/40 text-brand rounded-full text-sm hover:bg-brand/10 transition-colors"
         >
           Entrar

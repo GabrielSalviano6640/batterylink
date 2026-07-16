@@ -163,6 +163,7 @@ function TracePage() {
                 </div>
                 <Link
                   to="/auth"
+                  search={{ mode: undefined }}
                   className="px-4 py-2 bg-brand text-industrial rounded-md text-sm font-semibold"
                 >
                   Entrar

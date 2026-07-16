@@ -510,6 +510,7 @@ function CollectionDocumentModal({
     try {
       const type = String(fd.get("tipo"));
       const uploaded = await uploadPrivateDocument("collection", collection.id, type, file);
+      if (!uploaded) throw new Error("Falha ao anexar documento.");
       if (type === "mtr") {
         await workflowRpc("register_regulatory_document_metadata", {
           _private_document_id: uploaded.id,

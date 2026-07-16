@@ -59,22 +59,22 @@ function DetalheBateria() {
   }, [params.batteryId, navigate]);
 
   const handleCopyCode = () => {
-    if (battery?.codigo_unico) {
-      navigator.clipboard.writeText(battery.codigo_unico);
+    if (battery?.code) {
+      navigator.clipboard.writeText(battery.code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
   if (loading) {
-    return (
-      <div className="max-w-4xl mx-auto py-8 text-center text-slate-400">Carregando...</div>
-    );
+    return <div className="max-w-4xl mx-auto py-8 text-center text-slate-400">Carregando...</div>;
   }
 
   if (!battery) {
     return (
-      <div className="max-w-4xl mx-auto py-8 text-center text-slate-400">Bateria não encontrada.</div>
+      <div className="max-w-4xl mx-auto py-8 text-center text-slate-400">
+        Bateria não encontrada.
+      </div>
     );
   }
 
@@ -123,12 +123,8 @@ function DetalheBateria() {
                 onClick={handleCopyCode}
                 className="mt-1 inline-flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/20 rounded transition text-sm font-mono text-brand"
               >
-                {battery.codigo_unico}
-                {copied ? (
-                  <CheckCircle className="w-3 h-3" />
-                ) : (
-                  <Copy className="w-3 h-3" />
-                )}
+                {battery.code}
+                {copied ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
               </button>
             </div>
           </div>
@@ -143,7 +139,7 @@ function DetalheBateria() {
               <p className="text-sm font-mono break-all text-brand">{battery.qr_code_data}</p>
             </div>
             <a
-              href={battery.qr_code_data}
+              href={battery.qr_code_data ?? undefined}
               target="_blank"
               rel="noreferrer"
               className="px-3 py-1.5 bg-brand/20 text-brand rounded text-xs font-semibold hover:bg-brand/30 transition whitespace-nowrap"
@@ -185,7 +181,7 @@ function DetalheBateria() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">Estado aparente</p>
-                  <p className="font-semibold capitalize">{battery.estado_aparente}</p>
+                  <p className="font-semibold capitalize">{battery.estado}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs text-slate-400">Riscos detectados</p>
@@ -205,11 +201,13 @@ function DetalheBateria() {
                         Risco térmico
                       </span>
                     )}
-                    {!battery.possui_vazamento && !battery.possui_avaria && !battery.possui_risco_termico && (
-                      <span className="px-2 py-1 bg-emerald-500/20 text-emerald-300 rounded text-xs">
-                        Sem riscos
-                      </span>
-                    )}
+                    {!battery.possui_vazamento &&
+                      !battery.possui_avaria &&
+                      !battery.possui_risco_termico && (
+                        <span className="px-2 py-1 bg-emerald-500/20 text-emerald-300 rounded text-xs">
+                          Sem riscos
+                        </span>
+                      )}
                   </div>
                 </div>
               </div>
@@ -220,9 +218,9 @@ function DetalheBateria() {
           <div className="p-4 bg-white/[0.02] rounded-lg border border-white/5">
             <h2 className="text-xs font-mono uppercase text-slate-400 mb-3">Localização</h2>
             <p className="text-sm">
-              {battery.endereco_coleta}, {battery.cidade_origem} — {battery.estado_origem}
+              {battery.endereco}, {battery.cidade} — {battery.uf}
             </p>
-            <p className="text-xs text-slate-400 mt-1">CEP: {battery.cep_origem}</p>
+            <p className="text-xs text-slate-400 mt-1">CEP: {battery.cep}</p>
           </div>
 
           {/* Observações */}
@@ -237,7 +235,9 @@ function DetalheBateria() {
 
       {/* Histórico de eventos */}
       <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-        <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">Linha do tempo</h2>
+        <h2 className="text-sm font-mono uppercase tracking-widest text-brand mb-4">
+          Linha do tempo
+        </h2>
         <div className="space-y-3">
           {events.length === 0 ? (
             <p className="text-sm text-slate-400">Nenhum evento registrado ainda.</p>

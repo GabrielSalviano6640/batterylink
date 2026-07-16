@@ -8,8 +8,9 @@ import { Filter, Download, Eye, MapPin, Calendar, Phone, Plus } from "lucide-rea
 import type { Database } from "@/integrations/supabase/types";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
+type CollectionStatus = Database["public"]["Enums"]["collection_status"];
 type CollectionWithBatteries = Collection & {
-  batteries?: { id: string; codigo_unico: string; quantidade: number }[];
+  batteries?: { id: string; code: string; quantidade: number } | null;
 };
 
 export const Route = createFileRoute("/_authenticated/app/transportadora/")({
@@ -19,16 +20,19 @@ export const Route = createFileRoute("/_authenticated/app/transportadora/")({
 function TransportadoraDashboard() {
   const auth = useAuth();
   const [collections, setCollections] = useState<CollectionWithBatteries[]>([]);
-  const [filtroStatus, setFiltroStatus] = useState<string>("agendada");
+  const [filtroStatus, setFiltroStatus] = useState<CollectionStatus | "">("agendada");
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [selectedCollection, setSelectedCollection] = useState<CollectionWithBatteries | null>(null);
+  const [selectedCollection, setSelectedCollection] = useState<CollectionWithBatteries | null>(
+    null,
+  );
 
   const statusOptions = [
     { value: "agendada", label: "Agendada", color: "bg-blue-500/20 text-blue-300" },
+    { value: "retirada", label: "Retirada", color: "bg-indigo-500/20 text-indigo-300" },
     { value: "em_transporte", label: "Em transporte", color: "bg-amber-500/20 text-amber-300" },
-    { value: "entregue", label: "Entregue", color: "bg-emerald-500/20 text-emerald-300" },
-    { value: "atraso", label: "Com atraso", color: "bg-red-500/20 text-red-300" },
+    { value: "entregue_triagem", label: "Entregue", color: "bg-emerald-500/20 text-emerald-300" },
+    { value: "cancelada", label: "Cancelada", color: "bg-red-500/20 text-red-300" },
   ];
 
   useEffect(() => {
@@ -37,34 +41,35 @@ function TransportadoraDashboard() {
       setLoading(true);
 
       try {
-        // Find transporter's organization
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("transportadora_organization_id")
-          .eq("id", auth.user.id)
+        const { data: company } = await supabase
+          .from("companies")
+          .select("id")
+          .eq("owner_id", auth.user.id)
+          .eq("tipo", "transportadora")
           .limit(1)
           .single();
 
-        if (!profile?.transportadora_organization_id) {
+        if (!company?.id) {
           toast.error("Transportadora não vinculada a nenhuma organização.");
           return;
         }
 
-        // Fetch collections
         let query = supabase
           .from("collections")
-          .select("*, batteries(id, codigo_unico, quantidade)")
-          .eq("transportadora_organization_id", profile.transportadora_organization_id);
+          .select("*, batteries(id, code, quantidade)")
+          .eq("carrier_organization_id", company.id);
 
         if (filtroStatus) query = query.eq("status", filtroStatus);
 
         const from = page * 10;
         const to = from + 10 - 1;
 
-        const { data, error } = await query.range(from, to).order("data_coleta", { ascending: true });
+        const { data, error } = await query
+          .range(from, to)
+          .order("data_coleta", { ascending: true });
 
         if (error) throw error;
-        setCollections(data || []);
+        setCollections((data || []) as CollectionWithBatteries[]);
       } catch (error) {
         console.error(error);
         toast.error("Erro ao carregar coletas.");
@@ -76,7 +81,10 @@ function TransportadoraDashboard() {
     void load();
   }, [auth?.user?.id, filtroStatus, page]);
 
-  const handleStatusUpdate = async (collection: CollectionWithBatteries, newStatus: string) => {
+  const handleStatusUpdate = async (
+    collection: CollectionWithBatteries,
+    newStatus: CollectionStatus,
+  ) => {
     try {
       const { error } = await supabase
         .from("collections")
@@ -87,7 +95,7 @@ function TransportadoraDashboard() {
 
       toast.success(`Coleta marcada como ${workflowLabel(newStatus)}`);
       setCollections(
-        collections.map((c) => (c.id === collection.id ? { ...c, status: newStatus } : c))
+        collections.map((c) => (c.id === collection.id ? { ...c, status: newStatus } : c)),
       );
       setSelectedCollection(null);
     } catch (error) {
@@ -96,10 +104,11 @@ function TransportadoraDashboard() {
     }
   };
 
-  const getNextStatus = (currentStatus: string) => {
-    const flow: Record<string, string> = {
-      agendada: "em_transporte",
-      em_transporte: "entregue",
+  const getNextStatus = (currentStatus: CollectionStatus): CollectionStatus | undefined => {
+    const flow: Partial<Record<CollectionStatus, CollectionStatus>> = {
+      agendada: "retirada",
+      retirada: "em_transporte",
+      em_transporte: "entregue_triagem",
     };
     return flow[currentStatus];
   };
@@ -122,9 +131,18 @@ function TransportadoraDashboard() {
       <div className="grid md:grid-cols-4 gap-4">
         {[
           { label: "Agendadas", count: collections.filter((c) => c.status === "agendada").length },
-          { label: "Em transporte", count: collections.filter((c) => c.status === "em_transporte").length },
-          { label: "Entregues", count: collections.filter((c) => c.status === "entregue").length },
-          { label: "Com atraso", count: collections.filter((c) => c.status === "atraso").length },
+          {
+            label: "Em transporte",
+            count: collections.filter((c) => c.status === "em_transporte").length,
+          },
+          {
+            label: "Entregues",
+            count: collections.filter((c) => c.status === "entregue_triagem").length,
+          },
+          {
+            label: "Canceladas",
+            count: collections.filter((c) => c.status === "cancelada").length,
+          },
         ].map((kpi) => (
           <div
             key={kpi.label}
@@ -145,7 +163,7 @@ function TransportadoraDashboard() {
         <select
           value={filtroStatus}
           onChange={(e) => {
-            setFiltroStatus(e.target.value);
+            setFiltroStatus(e.target.value as CollectionStatus | "");
             setPage(0);
           }}
           className="px-3 py-1.5 bg-white/10 border border-white/20 rounded text-sm hover:bg-white/20 transition focus:outline-none focus:border-brand"
@@ -199,26 +217,30 @@ function TransportadoraDashboard() {
                       className="border-b border-white/5 hover:bg-white/[0.03] transition cursor-pointer"
                       onClick={() => setSelectedCollection(collection)}
                     >
-                      <td className="px-4 py-3">{collection.cidade_coleta}</td>
+                      <td className="px-4 py-3">{collection.origem_endereco}</td>
                       <td className="px-4 py-3 text-xs font-mono">
-                        {new Date(collection.data_coleta).toLocaleDateString("pt-BR")}
+                        {new Date(
+                          collection.data_coleta ??
+                            collection.data_agendada ??
+                            collection.scheduled_at ??
+                            collection.created_at,
+                        ).toLocaleDateString("pt-BR")}
                       </td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs font-semibold">
-                          {collection.batteries?.length || 0} bateria(s)
+                          {collection.batteries ? 1 : 0} bateria(s)
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs">
-                        {collection.contato_telefone && (
-                          <a href={`tel:${collection.contato_telefone}`} className="text-brand hover:underline">
-                            {collection.contato_telefone}
-                          </a>
-                        )}
+                        {collection.motorista || collection.placa || "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          statusOptions.find((s) => s.value === collection.status)?.color || "bg-slate-500/20 text-slate-300"
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            statusOptions.find((s) => s.value === collection.status)?.color ||
+                            "bg-slate-500/20 text-slate-300"
+                          }`}
+                        >
                           {workflowLabel(collection.status)}
                         </span>
                       </td>
@@ -265,10 +287,10 @@ function TransportadoraDashboard() {
               <div>
                 <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-brand" />
-                  {selectedCollection.cidade_coleta}
+                  {selectedCollection.origem_endereco}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  {selectedCollection.endereco_coleta}
+                  Destino: {selectedCollection.destino_endereco}
                 </p>
               </div>
 
@@ -282,41 +304,47 @@ function TransportadoraDashboard() {
                   <div>
                     <p className="text-xs text-slate-400">Data marcada</p>
                     <p className="font-semibold">
-                      {new Date(selectedCollection.data_coleta).toLocaleDateString("pt-BR")}
+                      {new Date(
+                        selectedCollection.data_coleta ??
+                          selectedCollection.data_agendada ??
+                          selectedCollection.scheduled_at ??
+                          selectedCollection.created_at,
+                      ).toLocaleDateString("pt-BR")}
                     </p>
                   </div>
                 </div>
-                {selectedCollection.contato_telefone && (
+                {(selectedCollection.motorista || selectedCollection.placa) && (
                   <div className="flex items-center gap-2">
                     <Phone className="w-4 h-4 text-slate-400" />
                     <div>
-                      <p className="text-xs text-slate-400">Contato</p>
-                      <a
-                        href={`tel:${selectedCollection.contato_telefone}`}
-                        className="font-semibold text-brand hover:underline"
-                      >
-                        {selectedCollection.contato_telefone}
-                      </a>
+                      <p className="text-xs text-slate-400">Motorista / placa</p>
+                      <p className="font-semibold">
+                        {[selectedCollection.motorista, selectedCollection.placa]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {selectedCollection.batteries && selectedCollection.batteries.length > 0 && (
+              {selectedCollection.batteries && (
                 <div className="bg-white/[0.02] rounded p-3 border border-white/5">
-                  <p className="text-xs text-slate-400 mb-2">Baterias ({selectedCollection.batteries.length})</p>
+                  <p className="text-xs text-slate-400 mb-2">Bateria</p>
                   <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {selectedCollection.batteries.map((bat) => (
-                      <div key={bat.id} className="text-xs text-slate-300">
-                        {bat.codigo_unico}
-                        <span className="text-slate-500 ml-1">({bat.quantidade}x)</span>
-                      </div>
-                    ))}
+                    <div className="text-xs text-slate-300">
+                      {selectedCollection.batteries.code}
+                      <span className="text-slate-500 ml-1">
+                        ({selectedCollection.batteries.quantidade}x)
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {selectedCollection.status !== "entregue" && (
+              {!["entregue_triagem", "entregue_destinador", "cancelada"].includes(
+                selectedCollection.status,
+              ) && (
                 <button
                   onClick={() => {
                     const nextStatus = getNextStatus(selectedCollection.status);

@@ -159,6 +159,7 @@ function Index() {
               </Link>
               <Link
                 to="/auth"
+                search={{ mode: undefined }}
                 className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-5 py-3 font-semibold hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <LogIn className="h-4 w-4" /> Entrar

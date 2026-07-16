@@ -172,8 +172,9 @@ function AuthPage() {
           await supabase.from("profiles").upsert(
             {
               id: uid,
-              nome: fullName,
-              telefone: phone,
+              full_name: fullName,
+              phone,
+              cargo,
               status: "pending",
               aceite_termos_at: now,
               aceite_privacidade_at: now,
@@ -193,45 +194,40 @@ function AuthPage() {
               telefone: phone,
               cep: cleanedCep,
               endereco: address,
-              cidade,
+              cidade: city,
               estado: stateValue,
+              tipo: requestedRole,
               status: "aguardando_aprovacao",
               status_aprovacao: "aguardando_aprovacao",
               is_demo: false,
             },
-            { onConflict: ["owner_id", "cnpj"] },
+            { onConflict: "owner_id,cnpj" },
           );
 
-          await supabase.from("registration_requests").insert(
-            {
-              user_id: uid,
-              requested_role: requestedRole,
-              company_data: {
-                razao_social: companyName,
-                cnpj_cpf: cleanedCnpjCpf,
-                tipo_organizacao: organizationType,
-                cargo,
-                endereco: address,
-                cidade,
-                estado: stateValue,
-                cep: cleanedCep,
-                telefone: phone,
-              },
-              status: "pending",
-              is_demo: false,
+          await supabase.from("registration_requests").insert({
+            user_id: uid,
+            requested_role: requestedRole,
+            company_data: {
+              razao_social: companyName,
+              cnpj_cpf: cleanedCnpjCpf,
+              tipo_organizacao: organizationType,
+              cargo,
+              endereco: address,
+              cidade: city,
+              estado: stateValue,
+              cep: cleanedCep,
+              telefone: phone,
             },
-            { returning: "minimal" },
-          );
+            status: "pending",
+          });
         }
 
         if (data.session?.user) {
           toast.success("Conta criada. Acesso pendente de aprovação.");
           navigate({ to: "/app" });
         } else {
-          toast.success(
-            "Conta criada. Verifique seu e-mail para ativar o acesso antes de entrar.",
-          );
-          navigate({ to: "/auth", search: { mode: "signin" } });
+          toast.success("Conta criada. Verifique seu e-mail para ativar o acesso antes de entrar.");
+          navigate({ to: "/auth", search: { mode: undefined } });
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });

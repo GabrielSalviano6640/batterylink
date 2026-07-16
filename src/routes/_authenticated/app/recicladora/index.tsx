@@ -4,12 +4,26 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { workflowLabel } from "@/lib/workflow";
-import { Filter, Download, Eye, TrendingUp, DollarSign, Plus, CheckCircle, XCircle } from "lucide-react";
+import {
+  Filter,
+  Download,
+  Eye,
+  TrendingUp,
+  DollarSign,
+  Plus,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
-type Proposal = Database["public"]["Tables"]["battery_proposals"]["Row"];
+type Proposal = Database["public"]["Tables"]["proposals"]["Row"];
+type ProposalStatus = Database["public"]["Enums"]["proposal_status"];
+type Lot = Pick<
+  Database["public"]["Tables"]["lots"]["Row"],
+  "id" | "code" | "quantidade_baterias" | "peso_total_kg"
+>;
 type ProposalWithLot = Proposal & {
-  lotes?: { id: string; codigo: string; quantidade_baterias: number; valor_total: number }[];
+  lots?: Lot | null;
 };
 
 export const Route = createFileRoute("/_authenticated/app/recicladora/")({
@@ -19,7 +33,7 @@ export const Route = createFileRoute("/_authenticated/app/recicladora/")({
 function RecicladorgDashboard() {
   const auth = useAuth();
   const [proposals, setProposals] = useState<ProposalWithLot[]>([]);
-  const [filtroStatus, setFiltroStatus] = useState<string>("enviada");
+  const [filtroStatus, setFiltroStatus] = useState<ProposalStatus | "">("enviada");
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedProposal, setSelectedProposal] = useState<ProposalWithLot | null>(null);
@@ -27,9 +41,8 @@ function RecicladorgDashboard() {
   const statusOptions = [
     { value: "enviada", label: "Enviada", color: "bg-blue-500/20 text-blue-300" },
     { value: "aceita", label: "Aceita", color: "bg-emerald-500/20 text-emerald-300" },
-    { value: "rejeitada", label: "Rejeitada", color: "bg-red-500/20 text-red-300" },
-    { value: "operacao_em_andamento", label: "Em operação", color: "bg-amber-500/20 text-amber-300" },
-    { value: "operacao_concluida", label: "Concluída", color: "bg-cyan-500/20 text-cyan-300" },
+    { value: "recusada", label: "Rejeitada", color: "bg-red-500/20 text-red-300" },
+    { value: "em_analise", label: "Em análise", color: "bg-amber-500/20 text-amber-300" },
   ];
 
   useEffect(() => {
@@ -38,34 +51,35 @@ function RecicladorgDashboard() {
       setLoading(true);
 
       try {
-        // Find recycler's organization
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("recicladora_organization_id")
-          .eq("id", auth.user.id)
+        const { data: company } = await supabase
+          .from("companies")
+          .select("id")
+          .eq("owner_id", auth.user.id)
+          .eq("tipo", "reciclador")
           .limit(1)
           .single();
 
-        if (!profile?.recicladora_organization_id) {
+        if (!company?.id) {
           toast.error("Recicladora não vinculada a nenhuma organização.");
           return;
         }
 
-        // Fetch proposals with lots
         let query = supabase
-          .from("battery_proposals")
-          .select("*, lotes(id, codigo, quantidade_baterias, valor_total)")
-          .eq("recicladora_organization_id", profile.recicladora_organization_id);
+          .from("proposals")
+          .select("*, lots(id, code, quantidade_baterias, peso_total_kg)")
+          .eq("reciclador_id", company.id);
 
         if (filtroStatus) query = query.eq("status", filtroStatus);
 
         const from = page * 10;
         const to = from + 10 - 1;
 
-        const { data, error } = await query.range(from, to).order("created_at", { ascending: false });
+        const { data, error } = await query
+          .range(from, to)
+          .order("created_at", { ascending: false });
 
         if (error) throw error;
-        setProposals(data || []);
+        setProposals((data || []) as ProposalWithLot[]);
       } catch (error) {
         console.error(error);
         toast.error("Erro ao carregar propostas.");
@@ -77,10 +91,13 @@ function RecicladorgDashboard() {
     void load();
   }, [auth?.user?.id, filtroStatus, page]);
 
-  const handleProposalStatusUpdate = async (proposal: ProposalWithLot, newStatus: string) => {
+  const handleProposalStatusUpdate = async (
+    proposal: ProposalWithLot,
+    newStatus: ProposalStatus,
+  ) => {
     try {
       const { error } = await supabase
-        .from("battery_proposals")
+        .from("proposals")
         .update({ status: newStatus })
         .eq("id", proposal.id);
 
@@ -88,16 +105,14 @@ function RecicladorgDashboard() {
 
       // Create notification
       await supabase.from("notifications").insert({
-        user_id: proposal.operador_user_id,
+        user_id: proposal.submitted_by ?? auth.user?.id ?? proposal.reciclador_id,
         tipo: "proposta_atualizada",
-        mensagem: `Proposta #${proposal.id.slice(0, 8)} foi ${workflowLabel(newStatus)}`,
-        lida: false,
+        title: "Proposta atualizada",
+        body: `Proposta #${proposal.id.slice(0, 8)} foi ${workflowLabel(newStatus)}`,
       });
 
       toast.success(`Proposta marcada como ${workflowLabel(newStatus)}`);
-      setProposals(
-        proposals.map((p) => (p.id === proposal.id ? { ...p, status: newStatus } : p))
-      );
+      setProposals(proposals.map((p) => (p.id === proposal.id ? { ...p, status: newStatus } : p)));
       setSelectedProposal(null);
     } catch (error) {
       console.error(error);
@@ -105,10 +120,10 @@ function RecicladorgDashboard() {
     }
   };
 
-  const totalValue = proposals.reduce((sum, p) => sum + (p.valor_proposto || 0), 0);
+  const totalValue = proposals.reduce((sum, p) => sum + (p.valor_total || 0), 0);
   const acceptedValue = proposals
     .filter((p) => p.status === "aceita")
-    .reduce((sum, p) => sum + (p.valor_proposto || 0), 0);
+    .reduce((sum, p) => sum + (p.valor_total || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -127,17 +142,30 @@ function RecicladorgDashboard() {
       {/* KPIs */}
       <div className="grid md:grid-cols-4 gap-4">
         {[
-          { label: "Propostas ativas", count: proposals.filter((p) => p.status === "enviada").length, icon: TrendingUp },
-          { label: "Aceitas", count: proposals.filter((p) => p.status === "aceita").length, icon: CheckCircle },
-          { label: "Rejeitadas", count: proposals.filter((p) => p.status === "rejeitada").length, icon: XCircle },
-          { label: "Em operação", count: proposals.filter((p) => p.status === "operacao_em_andamento").length, icon: TrendingUp },
+          {
+            label: "Propostas ativas",
+            count: proposals.filter((p) => p.status === "enviada").length,
+            icon: TrendingUp,
+          },
+          {
+            label: "Aceitas",
+            count: proposals.filter((p) => p.status === "aceita").length,
+            icon: CheckCircle,
+          },
+          {
+            label: "Rejeitadas",
+            count: proposals.filter((p) => p.status === "recusada").length,
+            icon: XCircle,
+          },
+          {
+            label: "Em operação",
+            count: proposals.filter((p) => p.status === "em_analise").length,
+            icon: TrendingUp,
+          },
         ].map((kpi) => {
           const Icon = kpi.icon;
           return (
-            <div
-              key={kpi.label}
-              className="bg-white/5 border border-white/10 rounded-lg p-4"
-            >
+            <div key={kpi.label} className="bg-white/5 border border-white/10 rounded-lg p-4">
               <div className="flex items-center gap-3">
                 <Icon className="w-5 h-5 text-brand flex-shrink-0" />
                 <div>
@@ -156,7 +184,9 @@ function RecicladorgDashboard() {
           <div className="flex items-center gap-3">
             <DollarSign className="w-5 h-5 text-amber-500 flex-shrink-0" />
             <div>
-              <p className="text-xs text-slate-400 uppercase tracking-wide">Valor total em propostas</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wide">
+                Valor total em propostas
+              </p>
               <p className="text-2xl font-bold text-amber-400">
                 R$ {totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </p>
@@ -167,7 +197,9 @@ function RecicladorgDashboard() {
           <div className="flex items-center gap-3">
             <DollarSign className="w-5 h-5 text-emerald-500 flex-shrink-0" />
             <div>
-              <p className="text-xs text-slate-400 uppercase tracking-wide">Valor em propostas aceitas</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wide">
+                Valor em propostas aceitas
+              </p>
               <p className="text-2xl font-bold text-emerald-400">
                 R$ {acceptedValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </p>
@@ -185,7 +217,7 @@ function RecicladorgDashboard() {
         <select
           value={filtroStatus}
           onChange={(e) => {
-            setFiltroStatus(e.target.value);
+            setFiltroStatus(e.target.value as ProposalStatus | "");
             setPage(0);
           }}
           className="px-3 py-1.5 bg-white/10 border border-white/20 rounded text-sm hover:bg-white/20 transition focus:outline-none focus:border-brand"
@@ -238,21 +270,25 @@ function RecicladorgDashboard() {
                       className="border-b border-white/5 hover:bg-white/[0.03] transition cursor-pointer"
                       onClick={() => setSelectedProposal(proposal)}
                     >
-                      <td className="px-4 py-3 text-brand font-mono">
-                        {proposal.proposta_id ? proposal.proposta_id.slice(0, 12) : "—"}
-                      </td>
+                      <td className="px-4 py-3 text-brand font-mono">{proposal.id.slice(0, 12)}</td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs font-semibold">
-                          {proposal.lotes?.[0]?.quantidade_baterias || 0}
+                          {proposal.lots?.quantidade_baterias || 0}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-semibold">
-                        R$ {(proposal.valor_proposto || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        R${" "}
+                        {(proposal.valor_total || 0).toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                        })}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          statusOptions.find((s) => s.value === proposal.status)?.color || "bg-slate-500/20 text-slate-300"
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            statusOptions.find((s) => s.value === proposal.status)?.color ||
+                            "bg-slate-500/20 text-slate-300"
+                          }`}
+                        >
                           {workflowLabel(proposal.status)}
                         </span>
                       </td>
@@ -298,7 +334,7 @@ function RecicladorgDashboard() {
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-semibold mb-1">Proposta</h3>
-                <p className="text-xs text-slate-400 font-mono">{selectedProposal.proposta_id}</p>
+                <p className="text-xs text-slate-400 font-mono">{selectedProposal.id}</p>
               </div>
 
               <div className="space-y-2 text-sm">
@@ -309,29 +345,32 @@ function RecicladorgDashboard() {
                 <div>
                   <p className="text-xs text-slate-400">Valor proposto</p>
                   <p className="font-semibold text-lg">
-                    R$ {(selectedProposal.valor_proposto || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    R${" "}
+                    {(selectedProposal.valor_total || 0).toLocaleString("pt-BR", {
+                      minimumFractionDigits: 2,
+                    })}
                   </p>
                 </div>
-                {selectedProposal.lotes && selectedProposal.lotes[0] && (
+                {selectedProposal.lots && (
                   <>
                     <div>
                       <p className="text-xs text-slate-400">Quantidade de baterias</p>
-                      <p className="font-semibold">{selectedProposal.lotes[0].quantidade_baterias}</p>
+                      <p className="font-semibold">{selectedProposal.lots.quantidade_baterias}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-400">Valor total do lote</p>
+                      <p className="text-xs text-slate-400">Peso total do lote</p>
                       <p className="font-semibold">
-                        R$ {(selectedProposal.lotes[0].valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        {selectedProposal.lots.peso_total_kg?.toLocaleString("pt-BR") ?? "—"} kg
                       </p>
                     </div>
                   </>
                 )}
               </div>
 
-              {selectedProposal.observacoes && (
+              {selectedProposal.condicoes && (
                 <div className="bg-white/[0.02] rounded p-3 border border-white/5">
-                  <p className="text-xs text-slate-400 mb-2">Observações</p>
-                  <p className="text-xs text-slate-300">{selectedProposal.observacoes}</p>
+                  <p className="text-xs text-slate-400 mb-2">Condições</p>
+                  <p className="text-xs text-slate-300">{selectedProposal.condicoes}</p>
                 </div>
               )}
 
@@ -346,7 +385,7 @@ function RecicladorgDashboard() {
                       Aceitar proposta
                     </button>
                     <button
-                      onClick={() => handleProposalStatusUpdate(selectedProposal, "rejeitada")}
+                      onClick={() => handleProposalStatusUpdate(selectedProposal, "recusada")}
                       className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded font-semibold text-sm transition"
                     >
                       <XCircle className="w-4 h-4" />
@@ -356,15 +395,15 @@ function RecicladorgDashboard() {
                 )}
                 {selectedProposal.status === "aceita" && (
                   <button
-                    onClick={() => handleProposalStatusUpdate(selectedProposal, "operacao_em_andamento")}
+                    onClick={() => handleProposalStatusUpdate(selectedProposal, "em_analise")}
                     className="w-full px-3 py-2 bg-amber-600/70 hover:bg-amber-600 rounded font-semibold text-sm transition"
                   >
                     Iniciar operação
                   </button>
                 )}
-                {selectedProposal.status === "operacao_em_andamento" && (
+                {selectedProposal.status === "em_analise" && (
                   <button
-                    onClick={() => handleProposalStatusUpdate(selectedProposal, "operacao_concluida")}
+                    onClick={() => handleProposalStatusUpdate(selectedProposal, "aceita")}
                     className="w-full px-3 py-2 bg-cyan-600/70 hover:bg-cyan-600 rounded font-semibold text-sm transition"
                   >
                     Concluir operação
