@@ -6,9 +6,28 @@ import assert from "node:assert/strict";
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 const security = read("supabase/migrations/20260716120000_phase17_21_security_quality_demo.sql");
+const signupRls = read("supabase/migrations/20260717090000_fix_profile_signup_rls.sql");
 const storage = read("supabase/migrations/20260716030000_phase11_12_traceability_storage.sql");
 const landing = read("src/routes/index.tsx");
+const authRoute = read("src/routes/auth.tsx");
+const pendingOrganizations = read("src/routes/_authenticated/app/admin/pending-organizations.tsx");
 const client = read("src/integrations/supabase/client.ts");
+
+test("painel de aprovacoes usa dados da solicitacao sem embed inexistente", () => {
+  assert.match(pendingOrganizations, /\.from\("registration_requests"\)/);
+  assert.match(pendingOrganizations, /\.select\("\*"\)/);
+  assert.doesNotMatch(pendingOrganizations, /companies\(\*\)/);
+});
+
+test("cadastro permite criar perfil pendente proprio e propaga erros", () => {
+  assert.match(signupRls, /FOR INSERT/);
+  assert.match(signupRls, /ON public\.profiles/);
+  assert.match(signupRls, /auth\.uid\(\) = id/);
+  assert.match(signupRls, /status = 'pending'::public\.request_status/);
+  assert.match(authRoute, /if \(profileError\) throw profileError/);
+  assert.match(authRoute, /if \(companyError\) throw companyError/);
+  assert.match(authRoute, /if \(requestError\) throw requestError/);
+});
 
 test("RLS é obrigatório nas entidades sensíveis e usuários suspensos são bloqueados", () => {
   for (const table of [

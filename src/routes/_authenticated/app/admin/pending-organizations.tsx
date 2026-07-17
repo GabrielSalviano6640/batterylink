@@ -49,7 +49,7 @@ function PendingOrganizationsAdmin() {
     try {
       const { data, error } = await supabase
         .from("registration_requests")
-        .select("*, companies(*)")
+        .select("*")
         .eq("status", "pending")
         .order("created_at", { ascending: true });
 

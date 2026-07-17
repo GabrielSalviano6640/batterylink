@@ -169,9 +169,10 @@ function AuthPage() {
 
         const uid = data.user?.id ?? data.session?.user?.id;
         if (uid && data.session?.user) {
-          await supabase.from("profiles").upsert(
+          const { error: profileError } = await supabase.from("profiles").upsert(
             {
               id: uid,
+              email,
               full_name: fullName,
               phone,
               cargo,
@@ -183,8 +184,9 @@ function AuthPage() {
             },
             { onConflict: "id" },
           );
+          if (profileError) throw profileError;
 
-          await supabase.from("companies").upsert(
+          const { error: companyError } = await supabase.from("companies").upsert(
             {
               owner_id: uid,
               razao_social: companyName,
@@ -203,8 +205,9 @@ function AuthPage() {
             },
             { onConflict: "owner_id,cnpj" },
           );
+          if (companyError) throw companyError;
 
-          await supabase.from("registration_requests").insert({
+          const { error: requestError } = await supabase.from("registration_requests").insert({
             user_id: uid,
             requested_role: requestedRole,
             company_data: {
@@ -220,6 +223,7 @@ function AuthPage() {
             },
             status: "pending",
           });
+          if (requestError) throw requestError;
         }
 
         if (data.session?.user) {
