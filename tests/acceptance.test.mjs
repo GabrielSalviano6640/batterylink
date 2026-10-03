@@ -13,20 +13,21 @@ const authRoute = read("src/routes/auth.tsx");
 const pendingOrganizations = read("src/routes/_authenticated/app/admin/pending-organizations.tsx");
 const client = read("src/integrations/supabase/client.ts");
 
-test("painel de aprovacoes usa dados da solicitacao sem embed inexistente", () => {
-  assert.match(pendingOrganizations, /\.from\("registration_requests"\)/);
-  assert.match(pendingOrganizations, /\.select\("\*"\)/);
-  assert.doesNotMatch(pendingOrganizations, /companies\(\*\)/);
+test("aprovação compartilha a interface que usa a RPC transacional", () => {
+  assert.match(pendingOrganizations, /component: RequestsTab/);
+  assert.match(
+    read("src/routes/_authenticated/app.admin.tsx"),
+    /supabase\.rpc\("approve_registration"/,
+  );
 });
 
-test("cadastro permite criar perfil pendente proprio e propaga erros", () => {
-  assert.match(signupRls, /FOR INSERT/);
-  assert.match(signupRls, /ON public\.profiles/);
-  assert.match(signupRls, /auth\.uid\(\) = id/);
-  assert.match(signupRls, /status = 'pending'::public\.request_status/);
-  assert.match(authRoute, /if \(profileError\) throw profileError/);
-  assert.match(authRoute, /if \(companyError\) throw companyError/);
-  assert.match(authRoute, /if \(requestError\) throw requestError/);
+test("cadastro é concluído na rota autenticada após confirmação", () => {
+  assert.match(authRoute, /accepted_terms: acceptTerms/);
+  assert.doesNotMatch(authRoute, /from\("companies"\)/);
+  assert.match(
+    read("src/routes/_authenticated/route.tsx"),
+    /workflowRpc\("complete_signup_registration"/,
+  );
 });
 
 test("RLS é obrigatório nas entidades sensíveis e usuários suspensos são bloqueados", () => {

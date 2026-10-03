@@ -142,7 +142,6 @@ function AuthPage() {
 
         const cleanedCnpjCpf = onlyDigits(cnpjCpf);
         const cleanedCep = onlyDigits(cep);
-        const now = new Date().toISOString();
 
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -161,70 +160,14 @@ function AuthPage() {
               cidade: city,
               estado: stateValue,
               cep: cleanedCep,
+              accepted_terms: acceptTerms,
+              accepted_privacy: acceptPriv,
+              accepted_data_processing: acceptLgpd,
             },
           },
         });
 
         if (error) throw error;
-
-        const uid = data.user?.id ?? data.session?.user?.id;
-        if (uid && data.session?.user) {
-          const { error: profileError } = await supabase.from("profiles").upsert(
-            {
-              id: uid,
-              email,
-              full_name: fullName,
-              phone,
-              cargo,
-              status: "pending",
-              aceite_termos_at: now,
-              aceite_privacidade_at: now,
-              aceite_consentimento_at: now,
-              timezone: "America/Sao_Paulo",
-            },
-            { onConflict: "id" },
-          );
-          if (profileError) throw profileError;
-
-          const { error: companyError } = await supabase.from("companies").upsert(
-            {
-              owner_id: uid,
-              razao_social: companyName,
-              cnpj_cpf: cleanedCnpjCpf,
-              tipo_organizacao: organizationType,
-              email,
-              telefone: phone,
-              cep: cleanedCep,
-              endereco: address,
-              cidade: city,
-              estado: stateValue,
-              tipo: requestedRole,
-              status: "aguardando_aprovacao",
-              status_aprovacao: "aguardando_aprovacao",
-              is_demo: false,
-            },
-            { onConflict: "owner_id,cnpj" },
-          );
-          if (companyError) throw companyError;
-
-          const { error: requestError } = await supabase.from("registration_requests").insert({
-            user_id: uid,
-            requested_role: requestedRole,
-            company_data: {
-              razao_social: companyName,
-              cnpj_cpf: cleanedCnpjCpf,
-              tipo_organizacao: organizationType,
-              cargo,
-              endereco: address,
-              cidade: city,
-              estado: stateValue,
-              cep: cleanedCep,
-              telefone: phone,
-            },
-            status: "pending",
-          });
-          if (requestError) throw requestError;
-        }
 
         if (data.session?.user) {
           toast.success("Conta criada. Acesso pendente de aprovação.");

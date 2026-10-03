@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,6 +43,20 @@ function getSubmitErrorMessage(err: unknown) {
 function AppHub() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const isHub = pathname.replace(/\/$/, "") === "/app";
+  const routeRole = pathname.startsWith("/app/admin")
+    ? "admin"
+    : pathname.startsWith("/app/gerador")
+      ? "gerador"
+      : pathname.startsWith("/app/operador")
+        ? "operador"
+        : pathname.startsWith("/app/transportadora")
+          ? "transportadora"
+          : pathname.startsWith("/app/recicladora")
+            ? "reciclador"
+            : null;
+  const canOpenRoute = !routeRole || auth.realRole === "admin" || auth.roles.includes(routeRole);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -110,9 +124,11 @@ function AppHub() {
           <SuspendedCard />
         ) : auth.status === "rejected" ? (
           <RejectedCard />
+        ) : !canOpenRoute ? (
+          <p role="alert">Seu perfil não tem acesso a este painel.</p>
         ) : (
-          <DashboardShell role={auth.role} isDemo={auth.isDemo}>
-            <RoleDashboard role={auth.role} />
+          <DashboardShell role={routeRole ?? auth.role} isDemo={auth.isDemo}>
+            {isHub ? <RoleDashboard role={auth.role} /> : <Outlet />}
           </DashboardShell>
         )}
       </main>
