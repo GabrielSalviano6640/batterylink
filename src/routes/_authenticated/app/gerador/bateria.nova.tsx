@@ -1,7 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { transitionBattery } from "@/lib/workflow";
+import { uploadPrivateDocument, validatePrivateFile } from "@/lib/private-documents";
 import { useAuth } from "@/hooks/use-auth";
 import {
   maskPhone,
@@ -43,6 +45,8 @@ function NovaBateria() {
   const [observacoes, setObservacoes] = useState("");
   const [fotos, setFotos] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const savedBattery = useRef<{ id: string; code: string } | null>(null);
+  const uploadedPhotos = useRef(new Set<File>());
 
   const handleFotoAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.currentTarget.files;
@@ -85,77 +89,63 @@ function NovaBateria() {
 
       if (!companies) throw new Error("Usuário não vinculado a nenhuma organização.");
 
-      // Criar bateria
-      const { data: battery, error: batteryError } = await supabase
-        .from("batteries")
-        .insert({
-          origem: origem.trim(),
-          fabricante: fabricante.trim(),
-          modelo: modelo.trim(),
-          numero_serie: numeroSerie.trim(),
-          quimica,
-          capacidade_kwh: capacidadeKwh ? parseFloat(capacidadeKwh) : null,
-          tensao: tensao ? parseFloat(tensao) : null,
-          quantidade: parseInt(quantidade),
-          peso_kg: pesoKg ? parseFloat(pesoKg) : null,
-          soh_percentual: sohPercentual ? parseFloat(sohPercentual) : null,
-          estado: estadoAparente,
-          possui_vazamento: possuiVazamento,
-          possui_avaria: possuiAvaria,
-          possui_risco_termico: possuiRiscoTermico,
-          urgencia,
-          cep: onlyDigits(cepOrigem),
-          cidade: cidadeOrigem.trim(),
-          uf: estadoOrigem.toUpperCase(),
-          endereco: enderecoColeta.trim(),
-          observacoes: observacoes.trim(),
-          status: "cadastrada",
-          created_by: userId,
-          company_id: companies.id,
-          owner_id: userId,
-        })
-        .select("id, code, tracking_token, qr_code_data")
-        .single();
+      fotos.forEach(validatePrivateFile);
 
-      if (batteryError) throw batteryError;
+      // Keep the draft across upload failures so retrying does not duplicate batteries.
+      if (!savedBattery.current) {
+        const { data: battery, error: batteryError } = await supabase
+          .from("batteries")
+          .insert({
+            origem: origem.trim(),
+            fabricante: fabricante.trim(),
+            modelo: modelo.trim(),
+            numero_serie: numeroSerie.trim(),
+            quimica,
+            capacidade_kwh: capacidadeKwh ? parseFloat(capacidadeKwh) : null,
+            tensao: tensao ? parseFloat(tensao) : null,
+            quantidade: parseInt(quantidade),
+            peso_kg: pesoKg ? parseFloat(pesoKg) : null,
+            soh_percentual: sohPercentual ? parseFloat(sohPercentual) : null,
+            estado: estadoAparente,
+            possui_vazamento: possuiVazamento,
+            possui_avaria: possuiAvaria,
+            possui_risco_termico: possuiRiscoTermico,
+            urgencia,
+            cep: onlyDigits(cepOrigem),
+            cidade: cidadeOrigem.trim(),
+            uf: estadoOrigem.toUpperCase(),
+            endereco: enderecoColeta.trim(),
+            observacoes: observacoes.trim(),
+            status: "cadastrada",
+            created_by: userId,
+            company_id: companies.id,
+            owner_id: userId,
+          })
+          .select("id, code, tracking_token, qr_code_data")
+          .single();
 
-      // Upload de fotos
-      if (fotos.length > 0) {
-        const uploadPromises = fotos.map(async (foto) => {
-          const ext = foto.name.split(".").pop() || "jpg";
-          const path = `batteries/${battery.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-          const { error: uploadError } = await supabase.storage
-            .from("battery-files")
-            .upload(path, foto);
-          if (uploadError) throw uploadError;
-          return { path, name: foto.name };
-        });
-
-        const uploadedFiles = await Promise.all(uploadPromises);
-        const { error: filesError } = await supabase.from("battery_files").insert(
-          uploadedFiles.map((f) => ({
-            battery_id: battery.id,
-            storage_path: f.path,
-            nome_arquivo: f.name,
-            tipo: "foto",
-            uploaded_by: userId,
-          })),
-        );
-        if (filesError) throw filesError;
+        if (batteryError) throw batteryError;
+        savedBattery.current = battery;
       }
+      const battery = savedBattery.current;
+      if (!battery) throw new Error("Não foi possível salvar a bateria.");
 
-      // Registrar evento
-      await supabase.from("battery_events").insert({
-        battery_id: battery.id,
-        event_type: "cadastrada",
-        actor_id: userId,
-        notes: `Bateria cadastrada: ${fabricante} ${modelo}`,
-      });
+      for (const foto of fotos) {
+        if (uploadedPhotos.current.has(foto)) continue;
+        await uploadPrivateDocument("battery", battery.id, "foto", foto);
+        uploadedPhotos.current.add(foto);
+      }
+      await transitionBattery(battery.id, "aguardando_analise", "Cadastro enviado para análise");
 
       toast.success(`Bateria cadastrada! Código: ${battery.code}`);
       navigate({ to: "/app/gerador", replace: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao cadastrar bateria.");
+      const reason = err instanceof Error ? err.message : "Erro ao cadastrar bateria.";
+      toast.error(
+        savedBattery.current
+          ? `Bateria ${savedBattery.current.code} salva. Envio incompleto: ${reason} Tente novamente ou consulte o painel.`
+          : reason,
+      );
     } finally {
       setLoading(false);
     }

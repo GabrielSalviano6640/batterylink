@@ -1,3 +1,5 @@
+> **Atualização 03/10/2026 — correções P0 em revisão.** Consulte [correções e validação](docs/P0_CORRECOES_E_VALIDACAO.md) para o estado desta branch. As declarações históricas abaixo sobre sistema operacional, fases não iniciadas e testes não representam homologação do MVP.
+
 # BatteryLink Brasil — Auditoria do Projeto Atual
 
 ## Visão geral

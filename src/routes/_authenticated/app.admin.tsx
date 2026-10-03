@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,6 +32,7 @@ function AdminPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("control");
+  const pathname = useLocation({ select: (location) => location.pathname });
 
   useEffect(() => {
     if (!auth.loading && auth.realRole !== "admin") {
@@ -51,6 +52,9 @@ function AdminPage() {
     { id: "reports", label: "Relatórios" },
     { id: "audit", label: "Auditoria" },
   ];
+
+  if (auth.loading || auth.realRole !== "admin") return null;
+  if (pathname.replace(/\/$/, "") !== "/app/admin") return <Outlet />;
 
   return (
     <div className="min-h-screen bg-industrial flex flex-col">
@@ -139,7 +143,7 @@ interface RequestRow {
   admin_notes?: string | null;
 }
 
-function RequestsTab() {
+export function RequestsTab() {
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"pending" | "all">("pending");
